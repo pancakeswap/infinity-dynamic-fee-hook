@@ -1,6 +1,15 @@
 [profile.default]
-src = "src"
-out = "out"
+src = 'src'
+out = 'foundry-out'
 libs = ["lib"]
-
-# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+solc_version = '0.8.26'
+optimizer_runs = 999999
+via_ir = true
+ffi = true
+gas_limit = "3000000000"
+fs_permissions = [
+    { access = "read-write", path = ".forge-snapshots/" },
+    { access = "read", path = "./foundry-out" },
+    { access = "read", path = "./script/config" },
+]
+evm_version = 'cancun'
