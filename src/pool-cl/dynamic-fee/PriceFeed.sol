@@ -14,13 +14,14 @@ contract PriceFeed is IPriceFeed {
     IERC20Metadata public immutable token0;
     IERC20Metadata public immutable token1;
 
-    constructor(address token0_, address token1_, address oracle_) {
+    constructor(address token0_, address token1_, address oracle_, uint32 oracleExpirationThreshold_) {
         if (token0_ > token1_) {
             (token0_, token1_) = (token1_, token0_);
         }
         token0 = IERC20Metadata(token0_);
         token1 = IERC20Metadata(token1_);
         info.oracle = AggregatorV3Interface(oracle_);
+        info.oracleExpirationThreshold = oracleExpirationThreshold_;
         info.oracleDecimal = info.oracle.decimals();
         info.token0Decimal = token0.decimals();
         info.token1Decimal = token1.decimals();
@@ -32,7 +33,11 @@ contract PriceFeed is IPriceFeed {
     /// combination of two oracles is required
     function getPriceX96() external view virtual returns (uint160 priceX96) {
         PriceFeedInfo memory priceFeedInfo = info;
-        (, int256 answer,,,) = priceFeedInfo.oracle.latestRoundData();
+        (, int256 answer,, uint256 updatedAt,) = priceFeedInfo.oracle.latestRoundData();
+        // can not revert, we must make sure hooks can still work even if the price is not available
+        if (block.timestamp - updatedAt > priceFeedInfo.oracleExpirationThreshold) {
+            return 0;
+        }
         priceX96 = uint160(FullMath.mulDiv(uint256(answer), FixedPoint96.Q96, 10 ** priceFeedInfo.oracleDecimal));
         priceX96 = uint160(FullMath.mulDiv(priceX96, priceFeedInfo.token0Decimal, priceFeedInfo.token1Decimal));
         // TODO: Is it better to cache the result?

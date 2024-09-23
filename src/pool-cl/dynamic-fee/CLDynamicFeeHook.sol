@@ -136,13 +136,17 @@ contract CLDynamicFeeHook is CLBaseHook {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
+        uint256 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
+        // If the oracle price is not available, we can't calculate the dynamic fee
+        if (priceX96Oracle == 0) {
+            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        }
+
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
         uint160 sqrtPriceX96After = _simulateSwap(key, params, hookData);
 
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
-
-        uint256 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
 
         uint256 sfX96;
         {

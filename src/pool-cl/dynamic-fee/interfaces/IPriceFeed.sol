@@ -7,6 +7,9 @@ import {AggregatorV3Interface} from "./AggregatorV3Interface.sol";
 interface IPriceFeed {
     struct PriceFeedInfo {
         AggregatorV3Interface oracle;
+        /// @dev if oracle latest data is older than this, it is considered expired
+        /// max is 4294967295(2^32 - 1) seconds , which is about 136 years
+        uint32 oracleExpirationThreshold;
         uint8 oracleDecimal;
         uint8 token0Decimal;
         uint8 token1Decimal;
