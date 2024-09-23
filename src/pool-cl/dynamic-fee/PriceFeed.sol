@@ -9,10 +9,10 @@ import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.s
 import {IPriceFeed} from "./interfaces/IPriceFeed.sol";
 
 contract PriceFeed is IPriceFeed {
+    PriceFeedInfo public info;
+
     IERC20Metadata public immutable token0;
     IERC20Metadata public immutable token1;
-
-    AggregatorV3Interface public immutable oracle;
 
     constructor(address token0_, address token1_, address oracle_) {
         if (token0_ > token1_) {
@@ -20,7 +20,10 @@ contract PriceFeed is IPriceFeed {
         }
         token0 = IERC20Metadata(token0_);
         token1 = IERC20Metadata(token1_);
-        oracle = AggregatorV3Interface(oracle_);
+        info.oracle = AggregatorV3Interface(oracle_);
+        info.oracleDecimal = info.oracle.decimals();
+        info.token0Decimal = token0.decimals();
+        info.token1Decimal = token1.decimals();
     }
 
     /// @dev Override if the oracle base quote tokens do not match the order of
@@ -28,9 +31,10 @@ contract PriceFeed is IPriceFeed {
     /// if there is no corresponding oracle for token0 token1 pair so that
     /// combination of two oracles is required
     function getPriceX96() external view virtual returns (uint160 priceX96) {
-        (, int256 answer,,,) = oracle.latestRoundData();
-        priceX96 = uint160(FullMath.mulDiv(uint256(answer), FixedPoint96.Q96, 10 ** oracle.decimals()));
-        priceX96 = uint160(FullMath.mulDiv(priceX96, token1.decimals(), token0.decimals()));
+        PriceFeedInfo memory priceFeedInfo = info;
+        (, int256 answer,,,) = priceFeedInfo.oracle.latestRoundData();
+        priceX96 = uint160(FullMath.mulDiv(uint256(answer), FixedPoint96.Q96, 10 ** priceFeedInfo.oracleDecimal));
+        priceX96 = uint160(FullMath.mulDiv(priceX96, priceFeedInfo.token0Decimal, priceFeedInfo.token1Decimal));
         // TODO: Is it better to cache the result?
     }
 }
