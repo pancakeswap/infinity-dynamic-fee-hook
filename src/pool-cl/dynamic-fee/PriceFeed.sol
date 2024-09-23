@@ -5,16 +5,24 @@ import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/exten
 import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
 import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.sol";
+import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 import {IPriceFeed} from "./interfaces/IPriceFeed.sol";
 
-contract PriceFeed is IPriceFeed {
+contract PriceFeed is IPriceFeed, Ownable {
     PriceFeedInfo public info;
 
     IERC20Metadata public immutable token0;
     IERC20Metadata public immutable token1;
 
-    constructor(address token0_, address token1_, address oracle_, uint32 oracleExpirationThreshold_) {
+    /// @dev Constructor
+    /// @param token0_ The first token
+    /// @param token1_ The second token
+    /// @param oracle_ The oracle address
+    /// @param oracleExpirationThreshold_ The oracle expiration threshold
+    constructor(address token0_, address token1_, address oracle_, uint32 oracleExpirationThreshold_)
+        Ownable(msg.sender)
+    {
         if (token0_ > token1_) {
             (token0_, token1_) = (token1_, token0_);
         }
@@ -25,6 +33,15 @@ contract PriceFeed is IPriceFeed {
         info.oracleDecimal = info.oracle.decimals();
         info.token0Decimal = token0.decimals();
         info.token1Decimal = token1.decimals();
+    }
+
+    /// @dev Update the oracle and oracle expiration threshold
+    /// @param oracle_ The new oracle address
+    /// @param oracleExpirationThreshold_ The new oracle expiration threshold
+    function updateOracle(address oracle_, uint32 oracleExpirationThreshold_) external onlyOwner {
+        info.oracle = AggregatorV3Interface(oracle_);
+        info.oracleExpirationThreshold = oracleExpirationThreshold_;
+        info.oracleDecimal = info.oracle.decimals();
     }
 
     /// @dev Override if the oracle base quote tokens do not match the order of
