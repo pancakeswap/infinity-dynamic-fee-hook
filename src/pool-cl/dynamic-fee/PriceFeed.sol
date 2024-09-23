@@ -40,11 +40,12 @@ contract PriceFeed is IPriceFeed, Ownable {
         }
         token0 = IERC20Metadata(token0_);
         token1 = IERC20Metadata(token1_);
+
+        info.oracle = AggregatorV3Interface(oracle_);
         uint8 oracleDecimals = info.oracle.decimals();
         if (oracleDecimals > ORACLE_MAX_DECIMALS) {
             revert InvalidOracleDecimals();
         }
-        info.oracle = AggregatorV3Interface(oracle_);
         info.oracleExpirationThreshold = oracleExpirationThreshold_;
         info.oracleTokenOrder = oracleTokenOrder_;
         info.oracleDecimal = oracleDecimals;
