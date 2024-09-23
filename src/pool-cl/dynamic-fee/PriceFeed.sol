@@ -80,7 +80,16 @@ contract PriceFeed is IPriceFeed, Ownable {
             currentPrice =
                 10 ** (priceFeedInfo.oracleDecimal * 2 + PRECISION_DECIMALS) / currentPrice / 10 ** PRECISION_DECIMALS;
         }
+
+        // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount
+        // token1_real_amount = v4_pool_token1_amount / 10 ** token1Decimal
+        // token0_real_amount = v4_pool_token0_amount / 10 ** token0Decimal
+        // currentPrice = token1_real_amount * 10 ** oracleDecimal / token0_real_amount
+        // currentPrice = v4_pool_token1_amount / 10 ** token1Decimal  * 10 ** oracleDecimal / (v4_pool_token0_amount / 10 ** token0Decimal)
+        // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount = currentPrice * 10 ** token1Decimal / 10 ** token0Decimal / 10 ** oracleDecimal
+        // v4_pool_price_x96 = v4_pool_price * 2^96 = currentPrice * 2^96 / 10 ** oracleDecimal * 10 ** token1Decimal / 10 ** token0Decimal
         priceX96 = uint160(FullMath.mulDiv(currentPrice, FixedPoint96.Q96, 10 ** priceFeedInfo.oracleDecimal));
-        priceX96 = uint160(FullMath.mulDiv(priceX96, priceFeedInfo.token0Decimal, priceFeedInfo.token1Decimal));
+        priceX96 =
+            uint160(FullMath.mulDiv(priceX96, 10 ** priceFeedInfo.token1Decimal, 10 ** priceFeedInfo.token0Decimal));
     }
 }
