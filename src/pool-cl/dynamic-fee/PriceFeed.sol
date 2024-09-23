@@ -15,22 +15,39 @@ contract PriceFeed is IPriceFeed, Ownable {
     IERC20Metadata public immutable token0;
     IERC20Metadata public immutable token1;
 
+    uint256 constant ORACLE_MAX_DECIMALS = 18;
+    uint256 constant PRECISION_DECIMALS = 18;
+    /// @dev Default order of the oracle
+    uint256 constant ORACLE_DEFAULT_ORDER = 0;
+
+    error InvalidOracleDecimals();
+
     /// @dev Constructor
     /// @param token0_ The first token
     /// @param token1_ The second token
     /// @param oracle_ The oracle address
     /// @param oracleExpirationThreshold_ The oracle expiration threshold
-    constructor(address token0_, address token1_, address oracle_, uint32 oracleExpirationThreshold_)
-        Ownable(msg.sender)
-    {
+    /// @param oracleTokenOrder_ The oracle token order
+    constructor(
+        address token0_,
+        address token1_,
+        address oracle_,
+        uint8 oracleTokenOrder_,
+        uint32 oracleExpirationThreshold_
+    ) Ownable(msg.sender) {
         if (token0_ > token1_) {
             (token0_, token1_) = (token1_, token0_);
         }
         token0 = IERC20Metadata(token0_);
         token1 = IERC20Metadata(token1_);
+        uint8 oracleDecimals = info.oracle.decimals();
+        if (oracleDecimals > ORACLE_MAX_DECIMALS) {
+            revert InvalidOracleDecimals();
+        }
         info.oracle = AggregatorV3Interface(oracle_);
         info.oracleExpirationThreshold = oracleExpirationThreshold_;
-        info.oracleDecimal = info.oracle.decimals();
+        info.oracleTokenOrder = oracleTokenOrder_;
+        info.oracleDecimal = oracleDecimals;
         info.token0Decimal = token0.decimals();
         info.token1Decimal = token1.decimals();
     }
@@ -41,22 +58,28 @@ contract PriceFeed is IPriceFeed, Ownable {
     function updateOracle(address oracle_, uint32 oracleExpirationThreshold_) external onlyOwner {
         info.oracle = AggregatorV3Interface(oracle_);
         info.oracleExpirationThreshold = oracleExpirationThreshold_;
-        info.oracleDecimal = info.oracle.decimals();
+        uint8 oracleDecimals = info.oracle.decimals();
+        if (oracleDecimals > ORACLE_MAX_DECIMALS) {
+            revert InvalidOracleDecimals();
+        }
+        info.oracleDecimal = oracleDecimals;
     }
 
-    /// @dev Override if the oracle base quote tokens do not match the order of
-    /// token0 and token1, i.e., the price from oracle needs to be inversed, or
-    /// if there is no corresponding oracle for token0 token1 pair so that
-    /// combination of two oracles is required
+    /// @dev Get the latest price
+    /// @return priceX96 The latest price
     function getPriceX96() external view virtual returns (uint160 priceX96) {
         PriceFeedInfo memory priceFeedInfo = info;
         (, int256 answer,, uint256 updatedAt,) = priceFeedInfo.oracle.latestRoundData();
         // can not revert, we must make sure hooks can still work even if the price is not available
-        if (block.timestamp > updatedAt + priceFeedInfo.oracleExpirationThreshold) {
+        if (answer <= 0 || block.timestamp > updatedAt + priceFeedInfo.oracleExpirationThreshold) {
             return 0;
         }
-        priceX96 = uint160(FullMath.mulDiv(uint256(answer), FixedPoint96.Q96, 10 ** priceFeedInfo.oracleDecimal));
+        uint256 currentPrice = uint256(answer);
+        if (priceFeedInfo.oracleTokenOrder != ORACLE_DEFAULT_ORDER) {
+            currentPrice =
+                10 ** (priceFeedInfo.oracleDecimal * 2 + PRECISION_DECIMALS) / currentPrice / 10 ** PRECISION_DECIMALS;
+        }
+        priceX96 = uint160(FullMath.mulDiv(currentPrice, FixedPoint96.Q96, 10 ** priceFeedInfo.oracleDecimal));
         priceX96 = uint160(FullMath.mulDiv(priceX96, priceFeedInfo.token0Decimal, priceFeedInfo.token1Decimal));
-        // TODO: Is it better to cache the result?
     }
 }

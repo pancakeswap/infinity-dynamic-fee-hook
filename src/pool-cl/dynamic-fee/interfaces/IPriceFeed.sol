@@ -10,6 +10,10 @@ interface IPriceFeed {
         /// @dev if oracle latest data is older than this, it is considered expired
         /// max is 4294967295(2^32 - 1) seconds , which is about 136 years
         uint32 oracleExpirationThreshold;
+        /// @dev oracle token order, 0 means oracle base is token0, 1 means oracle base is token1
+        /// For example , v4 pool is ETH/BTC (ETH token address is smaller than BTC token address), but oracle price is BTC/ETH
+        /// Then we need to calculate the ETH/BTC price based on oracle price
+        uint8 oracleTokenOrder;
         uint8 oracleDecimal;
         uint8 token0Decimal;
         uint8 token1Decimal;
