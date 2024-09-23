@@ -35,7 +35,7 @@ contract PriceFeed is IPriceFeed {
         PriceFeedInfo memory priceFeedInfo = info;
         (, int256 answer,, uint256 updatedAt,) = priceFeedInfo.oracle.latestRoundData();
         // can not revert, we must make sure hooks can still work even if the price is not available
-        if (block.timestamp - updatedAt > priceFeedInfo.oracleExpirationThreshold) {
+        if (block.timestamp > updatedAt + priceFeedInfo.oracleExpirationThreshold) {
             return 0;
         }
         priceX96 = uint160(FullMath.mulDiv(uint256(answer), FixedPoint96.Q96, 10 ** priceFeedInfo.oracleDecimal));
