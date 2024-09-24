@@ -176,11 +176,14 @@ contract CLDynamicFeeHook is CLBaseHook {
 
         // DFF = max{DFF_max * (1 - e ^ - (pifX96 - fX96)/fx96), 0}
         SD59x18 DFF;
+        // convert(int256 x) : Converts a simple integer to SD59x18 by multiplying it by `UNIT(1e18)`.
         SD59x18 DFF_MAX = convert(int256(int24(poolConfig.DFF_max)));
         // fx: fixed fee tier
         // fX96 = fx * 2 ** 96
         uint256 fX96 = FullMath.mulDiv(baseLpFee, FixedPoint96.Q96, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
         if (pifX96 > fX96) {
+            // inv(SD59x18 x) : 1/x, Calculates the inverse of x.
+            // exp(SD59x18 x) : e^x, Calculates the natural exponent of x.
             SD59x18 inter = inv(
                 exp(
                     convert(int256(FullMath.mulDiv(pifX96 - fX96, FixedPoint96.Q96, fX96)))
@@ -201,6 +204,7 @@ contract CLDynamicFeeHook is CLBaseHook {
             DFF = DFF_MAX;
         }
 
+        // convert(SD59x18 x) : Converts an SD59x18 number to a simple integer by dividing it by `UNIT(1e18)`.
         uint24 lpFee = uint24(int24(convert(DFF)));
 
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, lpFee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
