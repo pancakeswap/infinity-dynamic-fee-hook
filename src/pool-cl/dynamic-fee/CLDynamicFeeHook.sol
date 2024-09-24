@@ -160,15 +160,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
 
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
-        uint24 baseLpFee = poolConfig.baseLpFee;
 
         if (_isSim) {
-            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-        }
-
-        uint256 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
-        // If the oracle price is not available, we can't calculate the dynamic fee
-        if (priceX96Oracle == 0) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
@@ -177,6 +170,45 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
 
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
+
+        uint24 lpFee =
+            _calculateDFF(poolConfig.priceFeed, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max);
+        if (lpFee == 0) {
+            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        }
+
+        return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, lpFee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
+    }
+
+    /// @dev Get the dynamic fee for a swap
+    /// @param key The pool key
+    /// @param sqrtPriceX96AfterSwap The sqrt price after the swap
+    function getDFF(PoolKey calldata key, uint160 sqrtPriceX96AfterSwap) external view returns (uint24) {
+        PoolId id = key.toId();
+        PoolConfig memory poolConfig = poolConfigs[id];
+
+        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
+        uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
+        uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
+
+        return
+            _calculateDFF(poolConfig.priceFeed, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max);
+    }
+
+    // ========================= Internal Functions ============================
+
+    function _calculateDFF(
+        IPriceFeed priceFeed,
+        uint160 priceX96Before,
+        uint160 priceX96After,
+        uint24 baseLpFee,
+        uint24 DFF_max
+    ) internal view returns (uint24) {
+        uint256 priceX96Oracle = priceFeed.getPriceX96();
+        // If the oracle price is not available, we can't calculate the dynamic fee
+        if (priceX96Oracle == 0) {
+            return 0;
+        }
 
         // ScaledFactor(SF) = max{priceX96After - priceX96Before / priceX96Oracle - priceX96Before , 0}
         // sfX96 = SF * 2 ** 96
@@ -207,7 +239,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // DFF = max{DFF_max * (1 - e ^ - (pifX96 - fX96)/fx96), 0}
         SD59x18 DFF;
         // convert(int256 x) : Converts a simple integer to SD59x18 by multiplying it by `UNIT(1e18)`.
-        SD59x18 DFF_MAX = convert(int256(int24(poolConfig.DFF_max)));
+        SD59x18 DFF_MAX = convert(int256(int24(DFF_max)));
         // fx: fixed fee tier
         // fX96 = fx * 2 ** 96
         uint256 fX96 = FullMath.mulDiv(baseLpFee, FixedPoint96.Q96, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
@@ -226,7 +258,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         }
 
         if (DFF.isZero()) {
-            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+            return 0;
         }
 
         // Will return DFF_MAX if DFF > DFF_MAX
@@ -235,12 +267,10 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         }
 
         // convert(SD59x18 x) : Converts an SD59x18 number to a simple integer by dividing it by `UNIT(1e18)`.
-        uint24 lpFee = uint24(int24(convert(DFF)));
+        return uint24(int24(convert(DFF)));
 
-        return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, lpFee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
+        // TODO: Need to confrim lpfee is DFF or DFF*PIF ?
     }
-
-    // ========================= Internal Functions ============================
 
     /// @dev Simulate `swap`
     function _simulateSwap(PoolKey calldata key, ICLPoolManager.SwapParams calldata params, bytes calldata hookData)
