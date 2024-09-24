@@ -103,11 +103,11 @@ contract CLDynamicFeeHook is CLBaseHook {
             revert PriceFeedTokensNotMatch();
         }
 
-        if (initializeHookData.DFF_max > 1_000_000) {
+        if (initializeHookData.DFF_max > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
             revert DFFMaxTooLarge();
         }
 
-        if (initializeHookData.baseLpFee > 1_000_000) {
+        if (initializeHookData.baseLpFee > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
             revert BaseLpFeeTooLarge();
         }
 
@@ -123,7 +123,7 @@ contract CLDynamicFeeHook is CLBaseHook {
     }
 
     function beforeSwap(
-        address sender,
+        address,
         PoolKey calldata key,
         ICLPoolManager.SwapParams calldata params,
         bytes calldata hookData
@@ -178,7 +178,7 @@ contract CLDynamicFeeHook is CLBaseHook {
         SD59x18 DFF;
         // fx: fixed fee tier
         // fX96 = fx * 2 ** 96
-        uint256 fX96 = FullMath.mulDiv(baseLpFee, FixedPoint96.Q96, 1_000_000);
+        uint256 fX96 = FullMath.mulDiv(baseLpFee, FixedPoint96.Q96, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
         if (pifX96 > fX96) {
             SD59x18 inter = inv(
                 exp(
@@ -195,7 +195,9 @@ contract CLDynamicFeeHook is CLBaseHook {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
-        if (DFF > convert(1_000_000)) {
+        // TODO: should we return DFF_max ?
+        // If we revert , it means the swap will be reverted
+        if (DFF > convert(int256(uint256(LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE)))) {
             revert DFFTooLarge();
         }
 
