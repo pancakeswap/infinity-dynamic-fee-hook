@@ -65,8 +65,8 @@ contract CLDynamicFeeHook is CLBaseHook {
     function getHooksRegistrationBitmap() external pure override returns (uint16) {
         return _hooksRegistrationBitmapFrom(
             Permissions({
-                beforeInitialize: true,
-                afterInitialize: false,
+                beforeInitialize: false,
+                afterInitialize: true,
                 beforeAddLiquidity: false,
                 afterAddLiquidity: false,
                 beforeRemoveLiquidity: false,
@@ -83,7 +83,7 @@ contract CLDynamicFeeHook is CLBaseHook {
         );
     }
 
-    function beforeInitialize(address sender, PoolKey calldata key, uint160 sqrtPriceX96, bytes calldata hookData)
+    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata hookData)
         external
         override
         poolManagerOnly
@@ -119,7 +119,7 @@ contract CLDynamicFeeHook is CLBaseHook {
 
         poolManager.updateDynamicLPFee(key, initializeHookData.baseLpFee);
 
-        return this.beforeInitialize.selector;
+        return this.afterInitialize.selector;
     }
 
     function beforeSwap(
