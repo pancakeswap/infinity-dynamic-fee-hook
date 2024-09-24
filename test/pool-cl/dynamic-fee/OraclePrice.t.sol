@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
 import {MockAggregatorV3} from "../../helpers/MockAggregatorV3.sol";
+import {PriceFeedLib} from "../../../src/pool-cl/dynamic-fee/libraries/PriceFeedLib.sol";
 
 /// @dev This is a test contract for oracle price calculation
 /// @notice Check if the reverse order price is calculated correctly
@@ -131,34 +132,31 @@ contract OraclePriceTest is Test {
         assertEq(price, 10 ** PRECISION_DECIMALS / 50);
     }
 
-    /// @dev Calculate the reverse order price, copied from PriceFeed.sol
+    /// @dev Calculate the reverse order price
     function calaculate_reverse_order_price(uint256 price) public view returns (uint256) {
         uint8 oracleDecimals = defaultOracle.decimals();
-        return 10 ** (oracleDecimals * 2 + PRECISION_DECIMALS) / price / 10 ** PRECISION_DECIMALS;
+        return PriceFeedLib.calculateReverseOrderPrice(price, oracleDecimals);
     }
 
-    /// @dev calculate oracle price for two oracles, copied from PriceFeedTwodefaultOracle.sol
+    /// @dev calculate oracle price for two oracles
     function calculate_price_for_two_oracles(
-        MockAggregatorV3 oracle0,
+        MockAggregatorV3 _oracle0,
         uint8 oracle0TargetTokenIndex,
-        MockAggregatorV3 oracle1,
+        MockAggregatorV3 _oracle1,
         uint8 oracle1TargetTokenIndex
     ) public view returns (uint256) {
-        (, int256 oracle0Answer,,,) = oracle0.latestRoundData();
-        (, int256 oracle1Answer,,,) = oracle1.latestRoundData();
-        uint8 oracle0Decimal = oracle0.decimals();
-        uint8 oracle1Decimal = oracle1.decimals();
-        uint256 oracle0CurrentPrice = uint256(oracle0Answer);
-        if (oracle0TargetTokenIndex != 0) {
-            oracle0CurrentPrice =
-                10 ** (oracle0Decimal * 2 + PRECISION_DECIMALS) / oracle0CurrentPrice / 10 ** PRECISION_DECIMALS;
-        }
-        uint256 oracle1CurrentPrice = uint256(oracle1Answer);
-        if (oracle1TargetTokenIndex != 0) {
-            oracle1CurrentPrice =
-                10 ** (oracle1Decimal * 2 + PRECISION_DECIMALS) / oracle1CurrentPrice / 10 ** PRECISION_DECIMALS;
-        }
-        return oracle0CurrentPrice * 10 ** (PRECISION_DECIMALS + oracle1Decimal) / oracle1CurrentPrice
-            / 10 ** oracle0Decimal;
+        (, int256 oracle0Answer,,,) = _oracle0.latestRoundData();
+        (, int256 oracle1Answer,,,) = _oracle1.latestRoundData();
+        uint8 oracle0Decimal = _oracle0.decimals();
+        uint8 oracle1Decimal = _oracle1.decimals();
+
+        return PriceFeedLib.calculatePriceForTwoOracles(
+            oracle0Answer,
+            oracle0TargetTokenIndex,
+            oracle0Decimal,
+            oracle1Answer,
+            oracle1TargetTokenIndex,
+            oracle1Decimal
+        );
     }
 }

@@ -6,6 +6,7 @@ import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
 import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
+import {PriceFeedLib} from "./libraries/PriceFeedLib.sol";
 
 import {IPriceFeedTwoOracle} from "./interfaces/IPriceFeedTwoOracle.sol";
 
@@ -22,7 +23,6 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
     IERC20Metadata public immutable token1;
 
     uint256 constant ORACLE_MAX_DECIMALS = 18;
-    uint256 constant PRECISION_DECIMALS = 18;
     /// @dev Default target token index is 0, if index is not 0 ,need to calculate the reverse price
     uint256 constant ORACLE_DEFAULT_INDEX = 0;
 
@@ -112,33 +112,22 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
         ) {
             return 0;
         }
-        uint256 oracle0CurrentPrice = uint256(oracle0Answer);
-        if (priceFeedInfo.oracle0TargetTokenIndex != ORACLE_DEFAULT_INDEX) {
-            oracle0CurrentPrice = 10 ** (priceFeedInfo.oracle0Decimal * 2 + PRECISION_DECIMALS) / oracle0CurrentPrice
-                / 10 ** PRECISION_DECIMALS;
-        }
-        uint256 oracle1CurrentPrice = uint256(oracle1Answer);
-        if (priceFeedInfo.oracle1TargetTokenIndex != ORACLE_DEFAULT_INDEX) {
-            oracle1CurrentPrice = 10 ** (priceFeedInfo.oracle1Decimal * 2 + PRECISION_DECIMALS) / oracle1CurrentPrice
-                / 10 ** PRECISION_DECIMALS;
-        }
-        // need to calculate the price based on oracle0 and oracle1 price
-        // price = (oracle0_price / oracle0_decimals)  / (oracle1_price / oracle1_decimals)
-        // price = oracle0_price * oracle1_decimals / (oracle1_price * oracle0_decimals)
-        // becasue oracle0 and oracle1 maybe will have different decimals,so we will calculate price based on PRECISION_DECIMALS(18)
-        // price = oracle0_price * 10^18 * oracle1_decimals / (oracle1_price * oracle0_decimals)
-        uint256 currentPrice = oracle0CurrentPrice * 10 ** (PRECISION_DECIMALS + priceFeedInfo.oracle1Decimal)
-            / oracle1CurrentPrice / 10 ** priceFeedInfo.oracle0Decimal;
 
-        // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount
-        // token1_real_amount = v4_pool_token1_amount / 10 ** token1Decimal
-        // token0_real_amount = v4_pool_token0_amount / 10 ** token0Decimal
-        // currentPrice = token1_real_amount * 10 ** oracleDecimal / token0_real_amount
-        // currentPrice = v4_pool_token1_amount / 10 ** token1Decimal  * 10 ** oracleDecimal / (v4_pool_token0_amount / 10 ** token0Decimal)
-        // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount = currentPrice * 10 ** token1Decimal / 10 ** token0Decimal / 10 ** oracleDecimal
-        // v4_pool_price_x96 = v4_pool_price * 2^96 = currentPrice * 2^96 / 10 ** oracleDecimal * 10 ** token1Decimal / 10 ** token0Decimal
-        priceX96 = uint160(FullMath.mulDiv(currentPrice, FixedPoint96.Q96, 10 ** PRECISION_DECIMALS));
-        priceX96 =
-            uint160(FullMath.mulDiv(priceX96, 10 ** priceFeedInfo.token1Decimal, 10 ** priceFeedInfo.token0Decimal));
+        // becasue oracle0 and oracle1 maybe will have different decimals,so we will calculate price with PriceFeedLib.PRECISION_DECIMALS(18)
+        uint256 currentPrice = PriceFeedLib.calculatePriceForTwoOracles(
+            oracle0Answer,
+            priceFeedInfo.oracle0TargetTokenIndex,
+            priceFeedInfo.oracle0Decimal,
+            oracle1Answer,
+            priceFeedInfo.oracle1TargetTokenIndex,
+            priceFeedInfo.oracle1Decimal
+        );
+
+        priceX96 = PriceFeedLib.calculatePriceX96(
+            currentPrice,
+            priceFeedInfo.token0Decimal,
+            priceFeedInfo.token1Decimal,
+            uint8(PriceFeedLib.PRECISION_DECIMALS)
+        );
     }
 }

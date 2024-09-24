@@ -6,6 +6,7 @@ import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
 import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
+import {PriceFeedLib} from "./libraries/PriceFeedLib.sol";
 
 import {IPriceFeed} from "./interfaces/IPriceFeed.sol";
 
@@ -77,19 +78,11 @@ contract PriceFeed is IPriceFeed, Ownable {
         }
         uint256 currentPrice = uint256(answer);
         if (priceFeedInfo.oracleTokenOrder != ORACLE_DEFAULT_ORDER) {
-            currentPrice =
-                10 ** (priceFeedInfo.oracleDecimal * 2 + PRECISION_DECIMALS) / currentPrice / 10 ** PRECISION_DECIMALS;
+            currentPrice = PriceFeedLib.calculateReverseOrderPrice(currentPrice, priceFeedInfo.oracleDecimal);
         }
 
-        // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount
-        // token1_real_amount = v4_pool_token1_amount / 10 ** token1Decimal
-        // token0_real_amount = v4_pool_token0_amount / 10 ** token0Decimal
-        // currentPrice = token1_real_amount * 10 ** oracleDecimal / token0_real_amount
-        // currentPrice = v4_pool_token1_amount / 10 ** token1Decimal  * 10 ** oracleDecimal / (v4_pool_token0_amount / 10 ** token0Decimal)
-        // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount = currentPrice * 10 ** token1Decimal / 10 ** token0Decimal / 10 ** oracleDecimal
-        // v4_pool_price_x96 = v4_pool_price * 2^96 = currentPrice * 2^96 / 10 ** oracleDecimal * 10 ** token1Decimal / 10 ** token0Decimal
-        priceX96 = uint160(FullMath.mulDiv(currentPrice, FixedPoint96.Q96, 10 ** priceFeedInfo.oracleDecimal));
-        priceX96 =
-            uint160(FullMath.mulDiv(priceX96, 10 ** priceFeedInfo.token1Decimal, 10 ** priceFeedInfo.token0Decimal));
+        priceX96 = PriceFeedLib.calculatePriceX96(
+            currentPrice, priceFeedInfo.token0Decimal, priceFeedInfo.token1Decimal, priceFeedInfo.oracleDecimal
+        );
     }
 }
