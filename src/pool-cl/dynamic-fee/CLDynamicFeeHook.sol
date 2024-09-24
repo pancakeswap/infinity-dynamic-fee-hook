@@ -26,12 +26,6 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         uint24 baseLpFee;
     }
 
-    struct InitializeHookData {
-        IPriceFeed priceFeed;
-        uint24 DFF_max;
-        uint24 baseLpFee;
-    }
-
     struct CallbackData {
         address sender;
         PoolKey key;
@@ -106,7 +100,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             revert NotDynamicFeePool();
         }
 
-        InitializeHookData memory initializeHookData = abi.decode(hookData, (InitializeHookData));
+        PoolConfig memory initializeHookData = abi.decode(hookData, (PoolConfig));
 
         IPriceFeed priceFeed = IPriceFeed(initializeHookData.priceFeed);
         if (
