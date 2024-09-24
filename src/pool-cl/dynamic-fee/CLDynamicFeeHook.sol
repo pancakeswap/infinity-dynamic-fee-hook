@@ -166,7 +166,7 @@ contract CLDynamicFeeHook is CLBaseHook {
         // ipX96 = IP * 2 ** 96
         uint256 ipX96;
         {
-            uint256 r = FullMath.mulDiv(priceX96Before, FixedPoint96.Q96, priceX96Oracle);
+            uint256 r = FullMath.mulDiv(priceX96Oracle, FixedPoint96.Q96, priceX96Before);
             ipX96 = r > FixedPoint96.Q96 ? r - FixedPoint96.Q96 : FixedPoint96.Q96 - r;
         }
 
