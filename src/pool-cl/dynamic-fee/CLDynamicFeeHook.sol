@@ -176,6 +176,7 @@ contract CLDynamicFeeHook is CLBaseHook {
 
         // DFF = max{DFF_max * (1 - e ^ - (pifX96 - fX96)/fx96), 0}
         SD59x18 DFF;
+        SD59x18 DFF_MAX = convert(int256(int24(poolConfig.DFF_max)));
         // fx: fixed fee tier
         // fX96 = fx * 2 ** 96
         uint256 fX96 = FullMath.mulDiv(baseLpFee, FixedPoint96.Q96, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
@@ -187,7 +188,7 @@ contract CLDynamicFeeHook is CLBaseHook {
                 )
             );
             if (inter < UNIT) {
-                DFF = convert(int256(int24(poolConfig.DFF_max))) * (UNIT - inter);
+                DFF = DFF_MAX * (UNIT - inter);
             }
         }
 
@@ -195,10 +196,9 @@ contract CLDynamicFeeHook is CLBaseHook {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
-        // TODO: should we return DFF_max ?
-        // If we revert , it means the swap will be reverted
-        if (DFF > convert(int256(uint256(LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE)))) {
-            revert DFFTooLarge();
+        // Will return DFF_MAX if DFF > DFF_MAX
+        if (DFF > DFF_MAX) {
+            DFF = DFF_MAX;
         }
 
         uint24 lpFee = uint24(int24(convert(DFF)));
