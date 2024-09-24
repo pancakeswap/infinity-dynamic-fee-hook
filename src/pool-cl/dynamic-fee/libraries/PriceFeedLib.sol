@@ -21,26 +21,26 @@ library PriceFeedLib {
     /// @dev calculate oracle price for two oracles
     /// @param oracle0Answer The oracle0 answer
     /// @param oracle0TargetTokenIndex The oracle0 target token index
-    /// @param oracle0Decimal The oracle0 decimal
+    /// @param oracle0Decimals The oracle0 decimals
     /// @param oracle1Answer The oracle1 answer
     /// @param oracle1TargetTokenIndex The oracle1 target token index
-    /// @param oracle1Decimal The oracle1 decimal
+    /// @param oracle1Decimals The oracle1 decimals
     /// @return The price for two oracles with PRECISION_DECIMALS(18)
     function calculatePriceForTwoOracles(
         int256 oracle0Answer,
         uint8 oracle0TargetTokenIndex,
-        uint8 oracle0Decimal,
+        uint8 oracle0Decimals,
         int256 oracle1Answer,
         uint8 oracle1TargetTokenIndex,
-        uint8 oracle1Decimal
+        uint8 oracle1Decimals
     ) internal pure returns (uint256) {
         uint256 oracle0CurrentPrice = uint256(oracle0Answer);
         if (oracle0TargetTokenIndex != ORACLE_DEFAULT_INDEX) {
-            oracle0CurrentPrice = calculateReverseOrderPrice(oracle0CurrentPrice, oracle0Decimal);
+            oracle0CurrentPrice = calculateReverseOrderPrice(oracle0CurrentPrice, oracle0Decimals);
         }
         uint256 oracle1CurrentPrice = uint256(oracle1Answer);
         if (oracle1TargetTokenIndex != ORACLE_DEFAULT_INDEX) {
-            oracle1CurrentPrice = calculateReverseOrderPrice(oracle1CurrentPrice, oracle1Decimal);
+            oracle1CurrentPrice = calculateReverseOrderPrice(oracle1CurrentPrice, oracle1Decimals);
         }
 
         // need to calculate the price based on oracle0 and oracle1 price
@@ -48,8 +48,8 @@ library PriceFeedLib {
         // price = oracle0_price * oracle1_decimals / (oracle1_price * oracle0_decimals)
         // becasue oracle0 and oracle1 maybe will have different decimals,so we will calculate price with PRECISION_DECIMALS(18)
         // price = oracle0_price * 10^18 * oracle1_decimals / (oracle1_price * oracle0_decimals)
-        return oracle0CurrentPrice * 10 ** (PRECISION_DECIMALS + oracle1Decimal) / oracle1CurrentPrice
-            / 10 ** oracle0Decimal;
+        return oracle0CurrentPrice * 10 ** (PRECISION_DECIMALS + oracle1Decimals) / oracle1CurrentPrice
+            / 10 ** oracle0Decimals;
     }
 
     /// @dev Calculate the price based on the current price , token0 decimals, token1 decimals and oracle decimals
@@ -64,12 +64,12 @@ library PriceFeedLib {
         returns (uint160 priceX96)
     {
         // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount
-        // token1_real_amount = v4_pool_token1_amount / 10 ** token1Decimal
-        // token0_real_amount = v4_pool_token0_amount / 10 ** token0Decimal
-        // currentPrice = token1_real_amount * 10 ** oracleDecimal / token0_real_amount
-        // currentPrice = v4_pool_token1_amount / 10 ** token1Decimal  * 10 ** oracleDecimal / (v4_pool_token0_amount / 10 ** token0Decimal)
-        // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount = currentPrice * 10 ** token1Decimal / 10 ** token0Decimal / 10 ** oracleDecimal
-        // v4_pool_price_x96 = v4_pool_price * 2^96 = currentPrice * 2^96 / 10 ** oracleDecimal * 10 ** token1Decimal / 10 ** token0Decimal
+        // token1_real_amount = v4_pool_token1_amount / 10 ** token1Decimals
+        // token0_real_amount = v4_pool_token0_amount / 10 ** token0Decimals
+        // currentPrice = token1_real_amount * 10 ** oracleDecimals / token0_real_amount
+        // currentPrice = v4_pool_token1_amount / 10 ** token1Decimals  * 10 ** oracleDecimals / (v4_pool_token0_amount / 10 ** token0Decimals)
+        // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount = currentPrice * 10 ** token1Decimals / 10 ** token0Decimals / 10 ** oracleDecimals
+        // v4_pool_price_x96 = v4_pool_price * 2^96 = currentPrice * 2^96 / 10 ** oracleDecimals * 10 ** token1Decimals / 10 ** token0Decimals
         priceX96 = uint160(FullMath.mulDiv(price, FixedPoint96.Q96, oracleDecimals));
         priceX96 = uint160(FullMath.mulDiv(priceX96, 10 ** token1Decimals, 10 ** token0Decimals));
     }

@@ -147,16 +147,16 @@ contract OraclePriceTest is Test {
     ) public view returns (uint256) {
         (, int256 oracle0Answer,,,) = _oracle0.latestRoundData();
         (, int256 oracle1Answer,,,) = _oracle1.latestRoundData();
-        uint8 oracle0Decimal = _oracle0.decimals();
-        uint8 oracle1Decimal = _oracle1.decimals();
+        uint8 oracle0Decimals = _oracle0.decimals();
+        uint8 oracle1Decimals = _oracle1.decimals();
 
         return PriceFeedLib.calculatePriceForTwoOracles(
             oracle0Answer,
             oracle0TargetTokenIndex,
-            oracle0Decimal,
+            oracle0Decimals,
             oracle1Answer,
             oracle1TargetTokenIndex,
-            oracle1Decimal
+            oracle1Decimals
         );
     }
 }

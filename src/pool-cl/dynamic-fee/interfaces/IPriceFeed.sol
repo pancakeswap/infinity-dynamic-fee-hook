@@ -14,9 +14,9 @@ interface IPriceFeed {
         /// For example , v4 pool is ETH/BTC (ETH token address is smaller than BTC token address), but oracle price is BTC/ETH
         /// Then we need to calculate the ETH/BTC price based on oracle price
         uint8 oracleTokenOrder;
-        uint8 oracleDecimal;
-        uint8 token0Decimal;
-        uint8 token1Decimal;
+        uint8 oracleDecimals;
+        uint8 token0Decimals;
+        uint8 token1Decimals;
     }
 
     function token0() external view returns (IERC20Metadata);

@@ -21,7 +21,7 @@ contract PriceFeed is IPriceFeed, Ownable {
     /// @dev Default order of the oracle
     uint256 constant ORACLE_DEFAULT_ORDER = 0;
 
-    error InvalidOracleDecimals();
+    error InvalidoracleDecimalss();
 
     /// @dev Constructor
     /// @param token0_ The first token
@@ -43,15 +43,15 @@ contract PriceFeed is IPriceFeed, Ownable {
         token1 = IERC20Metadata(token1_);
 
         info.oracle = AggregatorV3Interface(oracle_);
-        uint8 oracleDecimals = info.oracle.decimals();
-        if (oracleDecimals > ORACLE_MAX_DECIMALS) {
-            revert InvalidOracleDecimals();
+        uint8 oracleDecimalss = info.oracle.decimals();
+        if (oracleDecimalss > ORACLE_MAX_DECIMALS) {
+            revert InvalidoracleDecimalss();
         }
         info.oracleExpirationThreshold = oracleExpirationThreshold_;
         info.oracleTokenOrder = oracleTokenOrder_;
-        info.oracleDecimal = oracleDecimals;
-        info.token0Decimal = token0.decimals();
-        info.token1Decimal = token1.decimals();
+        info.oracleDecimals = oracleDecimalss;
+        info.token0Decimals = token0.decimals();
+        info.token1Decimals = token1.decimals();
     }
 
     /// @dev Update the oracle and oracle expiration threshold
@@ -60,11 +60,11 @@ contract PriceFeed is IPriceFeed, Ownable {
     function updateOracle(address oracle_, uint32 oracleExpirationThreshold_) external onlyOwner {
         info.oracle = AggregatorV3Interface(oracle_);
         info.oracleExpirationThreshold = oracleExpirationThreshold_;
-        uint8 oracleDecimals = info.oracle.decimals();
-        if (oracleDecimals > ORACLE_MAX_DECIMALS) {
-            revert InvalidOracleDecimals();
+        uint8 oracleDecimalss = info.oracle.decimals();
+        if (oracleDecimalss > ORACLE_MAX_DECIMALS) {
+            revert InvalidoracleDecimalss();
         }
-        info.oracleDecimal = oracleDecimals;
+        info.oracleDecimals = oracleDecimalss;
     }
 
     /// @dev Get the latest price
@@ -78,11 +78,11 @@ contract PriceFeed is IPriceFeed, Ownable {
         }
         uint256 currentPrice = uint256(answer);
         if (priceFeedInfo.oracleTokenOrder != ORACLE_DEFAULT_ORDER) {
-            currentPrice = PriceFeedLib.calculateReverseOrderPrice(currentPrice, priceFeedInfo.oracleDecimal);
+            currentPrice = PriceFeedLib.calculateReverseOrderPrice(currentPrice, priceFeedInfo.oracleDecimals);
         }
 
         priceX96 = PriceFeedLib.calculatePriceX96(
-            currentPrice, priceFeedInfo.token0Decimal, priceFeedInfo.token1Decimal, priceFeedInfo.oracleDecimal
+            currentPrice, priceFeedInfo.token0Decimals, priceFeedInfo.token1Decimals, priceFeedInfo.oracleDecimals
         );
     }
 }

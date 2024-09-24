@@ -15,15 +15,15 @@ interface IPriceFeedTwoOracle {
         /// max is 4294967295(2^32 - 1) seconds , which is about 136 years
         uint32 oracle0ExpirationThreshold;
         uint32 oracle1ExpirationThreshold;
-        uint8 oracle0Decimal;
-        uint8 oracle1Decimal;
+        uint8 oracle0Decimals;
+        uint8 oracle1Decimals;
         /// @dev target token index in oracle default order.
         /// For example, if oracle0 is BTC/USD, oracle1 is USD/ETH, v4 pool is BTC/ETH
         /// Then oracle0TargetTokenIndex is 0(BTC index), oracle1TargetTokenIndex is 1(ETH index)
         uint8 oracle0TargetTokenIndex;
         uint8 oracle1TargetTokenIndex;
-        uint8 token0Decimal;
-        uint8 token1Decimal;
+        uint8 token0Decimals;
+        uint8 token1Decimals;
     }
 
     function token0() external view returns (IERC20Metadata);

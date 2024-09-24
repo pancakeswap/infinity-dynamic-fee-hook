@@ -60,12 +60,12 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
 
         info.oracle0ExpirationThreshold = oracle0ExpirationThreshold_;
         info.oracle1ExpirationThreshold = oracle1ExpirationThreshold_;
-        info.oracle0Decimal = oracle0Decimals;
-        info.oracle1Decimal = oracle1Decimals;
+        info.oracle0Decimals = oracle0Decimals;
+        info.oracle1Decimals = oracle1Decimals;
         info.oracle0TargetTokenIndex = oracle0TargetTokenIndex_;
         info.oracle1TargetTokenIndex = oracle1TargetTokenIndex_;
-        info.token0Decimal = token0.decimals();
-        info.token1Decimal = token1.decimals();
+        info.token0Decimals = token0.decimals();
+        info.token1Decimals = token1.decimals();
     }
 
     /// @dev Update the oracles , oracles target token index, and oracles expiration threshold
@@ -92,8 +92,8 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
         }
         info.oracle0ExpirationThreshold = oracle0ExpirationThreshold_;
         info.oracle1ExpirationThreshold = oracle1ExpirationThreshold_;
-        info.oracle0Decimal = oracle0Decimals;
-        info.oracle1Decimal = oracle1Decimals;
+        info.oracle0Decimals = oracle0Decimals;
+        info.oracle1Decimals = oracle1Decimals;
         info.oracle0TargetTokenIndex = oracle0TargetTokenIndex_;
         info.oracle1TargetTokenIndex = oracle1TargetTokenIndex_;
     }
@@ -117,16 +117,16 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
         uint256 currentPrice = PriceFeedLib.calculatePriceForTwoOracles(
             oracle0Answer,
             priceFeedInfo.oracle0TargetTokenIndex,
-            priceFeedInfo.oracle0Decimal,
+            priceFeedInfo.oracle0Decimals,
             oracle1Answer,
             priceFeedInfo.oracle1TargetTokenIndex,
-            priceFeedInfo.oracle1Decimal
+            priceFeedInfo.oracle1Decimals
         );
 
         priceX96 = PriceFeedLib.calculatePriceX96(
             currentPrice,
-            priceFeedInfo.token0Decimal,
-            priceFeedInfo.token1Decimal,
+            priceFeedInfo.token0Decimals,
+            priceFeedInfo.token1Decimals,
             uint8(PriceFeedLib.PRECISION_DECIMALS)
         );
     }
