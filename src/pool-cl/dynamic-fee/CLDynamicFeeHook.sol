@@ -12,10 +12,11 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "pancake-v4-core/src/types
 import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
 import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
 import {SD59x18, UNIT, convert, sub, mul, div, inv, exp, lt} from "prb-math/SD59x18.sol";
+import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 import {IPriceFeed} from "./interfaces/IPriceFeed.sol";
 
-contract CLDynamicFeeHook is CLBaseHook {
+contract CLDynamicFeeHook is CLBaseHook, Ownable {
     using PoolIdLibrary for PoolKey;
     using LPFeeLibrary for uint24;
 
@@ -40,12 +41,17 @@ contract CLDynamicFeeHook is CLBaseHook {
 
     // ============================== Variables ================================
 
+    // will be set to true when emergency status
+    // hooks will do nothing when this flag is true
+    bool public emergencyFlag;
+
     mapping(PoolId id => PoolConfig) public poolConfigs;
 
     // TODO: Make it transient
     bool private _isSim;
 
     // ============================== Events ===================================
+    event EmergencyFlagSet(bool flag);
 
     // ============================== Errors ===================================
 
@@ -60,7 +66,14 @@ contract CLDynamicFeeHook is CLBaseHook {
 
     // ========================= External Functions ============================
 
-    constructor(ICLPoolManager poolManager) CLBaseHook(poolManager) {}
+    constructor(ICLPoolManager poolManager) Ownable(msg.sender) CLBaseHook(poolManager) {}
+
+    /// @dev Set the emergency flag
+    /// @param flag The emergency flag
+    function setEmergencyFlag(bool flag) external onlyOwner {
+        emergencyFlag = flag;
+        emit EmergencyFlagSet(flag);
+    }
 
     function getHooksRegistrationBitmap() external pure override returns (uint16) {
         return _hooksRegistrationBitmapFrom(
@@ -128,6 +141,10 @@ contract CLDynamicFeeHook is CLBaseHook {
         ICLPoolManager.SwapParams calldata params,
         bytes calldata hookData
     ) external override returns (bytes4, BeforeSwapDelta, uint24) {
+        if (emergencyFlag) {
+            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        }
+
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
         uint24 baseLpFee = poolConfig.baseLpFee;
@@ -218,9 +235,7 @@ contract CLDynamicFeeHook is CLBaseHook {
         returns (uint160 sqrtPriceX96)
     {
         _isSim = true;
-        try poolManager.vault().lock(
-            abi.encode(CallbackData({sender: msg.sender, key: key, params: params, hookData: hookData}))
-        ) {
+        try vault.lock(abi.encode(CallbackData({sender: msg.sender, key: key, params: params, hookData: hookData}))) {
             revert();
         } catch (bytes memory reason) {
             bytes4 selector;
