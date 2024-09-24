@@ -69,6 +69,25 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         emit EmergencyFlagSet(flag);
     }
 
+    /// @dev Develpers can call this function to generate the hook data when initializing the pool
+    /// @param priceFeed The price feed contract
+    /// @param DFF_max The maximum dynamic fee
+    /// @param baseLpFee The base LP fee
+    function generateInitializeHookData(IPriceFeed priceFeed, uint24 DFF_max, uint24 baseLpFee)
+        external
+        pure
+        returns (bytes memory)
+    {
+        if (DFF_max > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
+            revert DFFMaxTooLarge();
+        }
+
+        if (baseLpFee > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
+            revert BaseLpFeeTooLarge();
+        }
+        return abi.encode(PoolConfig({priceFeed: priceFeed, DFF_max: DFF_max, baseLpFee: baseLpFee}));
+    }
+
     function getHooksRegistrationBitmap() external pure override returns (uint16) {
         return _hooksRegistrationBitmapFrom(
             Permissions({
