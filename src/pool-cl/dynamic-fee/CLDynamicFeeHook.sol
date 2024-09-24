@@ -148,6 +148,8 @@ contract CLDynamicFeeHook is CLBaseHook {
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
 
+        // ScaledFactor(SF) = max{priceX96After - priceX96Before / priceX96Oracle - priceX96Before , 0}
+        // sfX96 = SF * 2 ** 96
         uint256 sfX96;
         {
             if (priceX96After > priceX96Before && priceX96Oracle > priceX96Before) {
@@ -160,15 +162,22 @@ contract CLDynamicFeeHook is CLBaseHook {
             }
         }
 
+        // IndexPremium(IP) = ABS (priceX96Oracle/priceX96Before - -1)
+        // ipX96 = IP * 2 ** 96
         uint256 ipX96;
         {
             uint256 r = FullMath.mulDiv(priceX96Before, FixedPoint96.Q96, priceX96Oracle);
             ipX96 = r > FixedPoint96.Q96 ? r - FixedPoint96.Q96 : FixedPoint96.Q96 - r;
         }
 
+        // PriceImpactFactor(PIF) = SF * IP
+        // pifX96 = PIF * 2 ** 96
         uint256 pifX96 = FullMath.mulDiv(sfX96, ipX96, FixedPoint96.Q96);
 
+        // DFF = max{DFF_max * (1 - e ^ - (pifX96 - fX96)/fx96), 0}
         SD59x18 DFF;
+        // fx: fixed fee tier
+        // fX96 = fx * 2 ** 96
         uint256 fX96 = FullMath.mulDiv(baseLpFee, FixedPoint96.Q96, 1_000_000);
         if (pifX96 > fX96) {
             SD59x18 inter = inv(
