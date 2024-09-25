@@ -70,7 +70,7 @@ library PriceFeedLib {
         // currentPrice = v4_pool_token1_amount / 10 ** token1Decimals  * 10 ** oracleDecimals / (v4_pool_token0_amount / 10 ** token0Decimals)
         // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount = currentPrice * 10 ** token1Decimals / 10 ** token0Decimals / 10 ** oracleDecimals
         // v4_pool_price_x96 = v4_pool_price * 2^96 = currentPrice * 2^96 / 10 ** oracleDecimals * 10 ** token1Decimals / 10 ** token0Decimals
-        priceX96 = uint160(FullMath.mulDiv(price, FixedPoint96.Q96, oracleDecimals));
+        priceX96 = uint160(FullMath.mulDiv(price, FixedPoint96.Q96, 10 ** oracleDecimals));
         priceX96 = uint160(FullMath.mulDiv(priceX96, 10 ** token1Decimals, 10 ** token0Decimals));
     }
 }
