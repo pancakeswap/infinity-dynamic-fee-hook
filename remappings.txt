@@ -1,1 +1,3 @@
 openzeppelin-contracts/=lib/pancake-v4-core/lib/openzeppelin-contracts/
+pancake-v4-periphery/=lib/pancake-v4-hooks/lib/pancake-v4-universal-router/lib/pancake-v4-periphery/
+solmate/=lib/pancake-v4-hooks/lib/pancake-v4-universal-router/lib/pancake-v4-periphery/lib/pancake-v4-core/lib/solmate/

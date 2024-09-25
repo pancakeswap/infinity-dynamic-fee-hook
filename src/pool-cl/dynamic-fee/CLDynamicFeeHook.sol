@@ -7,6 +7,7 @@ import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.s
 import {LPFeeLibrary} from "pancake-v4-core/src/libraries/LPFeeLibrary.sol";
 import {PoolKey} from "pancake-v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "pancake-v4-core/src/types/PoolId.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "pancake-v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "pancake-v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "pancake-v4-core/src/types/BeforeSwapDelta.sol";
 import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
@@ -55,6 +56,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     error BaseLpFeeTooLarge();
     error DFFTooLarge();
     error SwapAndRevert(uint160 sqrtPriceX96);
+    error NotDynamicFeeHook();
 
     // ============================== Modifiers ================================
 
@@ -278,7 +280,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         returns (uint160 sqrtPriceX96)
     {
         _isSim = true;
-        try vault.lock(abi.encode(CallbackData({sender: msg.sender, key: key, params: params, hookData: hookData}))) {
+        try this.simulateSwap(key, params, hookData) {
             revert();
         } catch (bytes memory reason) {
             bytes4 selector;
@@ -299,12 +301,15 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     }
 
     /// @dev Revert a custom error on purpose to achieve simulation of `swap`
-    function lockAcquired(bytes calldata rawData) external override returns (bytes memory) {
-        CallbackData memory data = abi.decode(rawData, (CallbackData));
-
-        poolManager.swap(data.key, data.params, data.hookData);
-
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(data.key.toId());
+    function simulateSwap(PoolKey calldata key, ICLPoolManager.SwapParams calldata params, bytes calldata hookData)
+        external
+    {
+        // Only this contract can call this function
+        if (msg.sender != address(this)) {
+            revert NotDynamicFeeHook();
+        }
+        poolManager.swap(key, params, hookData);
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
         revert SwapAndRevert(sqrtPriceX96);
     }
 }
