@@ -157,7 +157,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         IERC20(Currency.unwrap(currency1)).approve(address(v4Router), 10000000 ether);
     }
 
-    function test_dynamic_fee_hook_initialization() public {
+    function test_dynamic_fee_hook_initialization() public view {
         (IPriceFeed priceFeedContract, uint24 hook_DFF_max, uint24 baseLpFee) = dynamicFeeHook.poolConfigs(poolId);
         assertEq(address(priceFeedContract), address(priceFeed));
         assertEq(hook_DFF_max, MAX_DFF);
@@ -172,8 +172,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
     }
 
     function test_swap_no_DFF() external {
-        (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee) = poolManager.getSlot0(poolId);
         uint128 liquidity = poolManager.getLiquidity(poolId);
+        assertGt(liquidity, 0);
 
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
             ICLRouterBase.CLSwapExactInputSingleParams(key, true, 1 ether, 0, 0, bytes(""));
@@ -181,8 +181,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
         uint160 sqrtPriceX96AfterSwap = 79220260293300080910473130642;
-        uint24 DFF_result = dynamicFeeHook.getDFF(key, sqrtPriceX96AfterSwap);
-        assertEq(DFF_result, 0);
+        uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96AfterSwap);
+        assertEq(dynamic_fee, 0);
 
         vm.expectEmit(true, true, true, true);
         emit Swap(
@@ -198,6 +198,9 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         );
         v4Router.executeActions(data);
         (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
+        // charge tokenIn fee
+        assertGt(feeGrowthGlobal0x128, 0);
+        assertEq(feeGrowthGlobal1x128, 0);
     }
 
     // allow refund of ETH

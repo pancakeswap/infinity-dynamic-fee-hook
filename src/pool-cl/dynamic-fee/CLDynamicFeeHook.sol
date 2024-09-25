@@ -173,8 +173,9 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
 
-        uint24 lpFee =
-            _calculateDFF(poolConfig.priceFeed, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max);
+        uint24 lpFee = _calculateDynamicFee(
+            poolConfig.priceFeed, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
+        );
         if (lpFee == 0) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
@@ -185,7 +186,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     /// @dev Get the dynamic fee for a swap
     /// @param key The pool key
     /// @param sqrtPriceX96AfterSwap The sqrt price after the swap
-    function getDFF(PoolKey calldata key, uint160 sqrtPriceX96AfterSwap) external view returns (uint24) {
+    function getDynamicFee(PoolKey calldata key, uint160 sqrtPriceX96AfterSwap) external view returns (uint24) {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
@@ -193,13 +194,14 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
 
-        return
-            _calculateDFF(poolConfig.priceFeed, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max);
+        return _calculateDynamicFee(
+            poolConfig.priceFeed, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
+        );
     }
 
     // ========================= Internal Functions ============================
 
-    function _calculateDFF(
+    function _calculateDynamicFee(
         IPriceFeed priceFeed,
         uint160 priceX96Before,
         uint160 priceX96After,
@@ -269,9 +271,13 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         }
 
         // convert(SD59x18 x) : Converts an SD59x18 number to a simple integer by dividing it by `UNIT(1e18)`.
-        return uint24(int24(convert(DFF)));
-
-        // TODO: Need to confrim lpfee is DFF or DFF*PIF ?
+        uint24 DFF_uint24 = uint24(int24(convert(DFF)));
+        // LPFee = DFF_uint24 * PIF = DFF_uint24 * pifX96 / 2 ** 96
+        uint24 lpFee = uint24(FullMath.mulDiv(DFF_uint24, pifX96, FixedPoint96.Q96));
+        // TODO : Need to add one more parameter about max dynamic fee
+        // DF_max : dynamic fee max
+        // if (lpFee > DF_max) {lpFee = DF_max;}
+        return lpFee;
     }
 
     /// @dev Simulate `swap`
