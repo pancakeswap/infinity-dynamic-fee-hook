@@ -277,6 +277,9 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // TODO : Need to add one more parameter about max dynamic fee
         // DF_max : dynamic fee max
         // if (lpFee > DF_max) {lpFee = DF_max;}
+        if (lpFee < baseLpFee) {
+            return 0;
+        }
         return lpFee;
     }
 
