@@ -168,6 +168,9 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         }
 
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
+        // TODO: Can check oracle price and sqrtPriceX96Before to skip the calculation, can save a lot of gas
+        // if oracle_price  > sqrtPriceX96Before && zeroForOne == true , no need to calculate dynamic fee
+        // if oracle_price  < sqrtPriceX96Before && zeroForOne == false , no need to calculate dynamic fee
         uint160 sqrtPriceX96After = _simulateSwap(key, params, hookData);
 
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
@@ -250,6 +253,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         if (pifX96 > fX96) {
             // inv(SD59x18 x) : 1/x, Calculates the inverse of x.
             // exp(SD59x18 x) : e^x, Calculates the natural exponent of x.
+            // TODO : need to check exp revert
             SD59x18 inter = inv(
                 exp(
                     convert(int256(FullMath.mulDiv(pifX96 - fX96, FixedPoint96.Q96, fX96)))
