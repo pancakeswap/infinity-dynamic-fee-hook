@@ -175,6 +175,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // if oracle_price  < sqrtPriceX96Before && zeroForOne == false , no need to calculate dynamic fee
         uint160 sqrtPriceX96After = _simulateSwap(key, params, hookData);
 
+        // Fix TODO : Can not use priceX96
+        // when tick is -887272, sqrtPrice is 4295128739 , priceX96 is 4295128739 * 4295128739 / 2^96 = 0
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
 
