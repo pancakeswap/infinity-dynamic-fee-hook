@@ -12,7 +12,9 @@ import {Currency} from "pancake-v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "pancake-v4-core/src/types/BeforeSwapDelta.sol";
 import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
 import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
-import {SD59x18, UNIT, convert, sub, mul, div, inv, exp, lt} from "prb-math/SD59x18.sol";
+import {
+    SD59x18, uUNIT, UNIT, convert, inv, exp, lt, gt, uEXP_MIN_THRESHOLD, EXP_MAX_INPUT
+} from "prb-math/SD59x18.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 import {IPriceFeed} from "./interfaces/IPriceFeed.sol";
@@ -243,9 +245,10 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // pifX96 = PIF * 2 ** 96
         uint256 pifX96 = FullMath.mulDiv(sfX96, ipX96, FixedPoint96.Q96);
 
-        // DFF = max{DFF_max * (1 - e ^ - (pifX96 - fX96)/fx96), 0}
+        // DFF = max{DFF_max * (1 - e ^ -(pifX96 - fX96) / fx96), 0} = max{DFF_max * (1 - 1/ e ^ (pifX96 - fX96) / fx96), 0}
         SD59x18 DFF;
         // convert(int256 x) : Converts a simple integer to SD59x18 by multiplying it by `UNIT(1e18)`.
+        // SD59x18 x =  SD59x18.wrap(x_int256 * uUNIT)
         SD59x18 DFF_MAX = convert(int256(int24(DFF_max)));
         // fx: fixed fee tier
         // fX96 = fx * 2 ** 96
@@ -253,15 +256,18 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         if (pifX96 > fX96) {
             // inv(SD59x18 x) : 1/x, Calculates the inverse of x.
             // exp(SD59x18 x) : e^x, Calculates the natural exponent of x.
-            // TODO : need to check exp revert
-            SD59x18 inter = inv(
-                exp(
-                    convert(int256(FullMath.mulDiv(pifX96 - fX96, FixedPoint96.Q96, fX96)))
-                        / convert(int256(FixedPoint96.Q96))
-                )
-            );
-            if (inter < UNIT) {
-                DFF = DFF_MAX * (UNIT - inter);
+            // exponent_uint256 = (pifX96 - fX96) / fx96
+            // exponent_SD59x18_int256 =  int256( (pifX96 - fX96) * uUNIT / fx96 )
+            // exponent = SD59x18.wrap(exponent_SD59x18_int256)
+            SD59x18 exponent = SD59x18.wrap(int256(FullMath.mulDiv(pifX96 - fX96, uint256(uUNIT), fX96)));
+            // when exponent > EXP_MAX_INPUT, inter(1/e^exponent) will be almost equal to 0, so DFF will be be almost equal to DFF_MAX
+            if (gt(exponent, EXP_MAX_INPUT)) {
+                DFF = DFF_MAX;
+            } else {
+                SD59x18 inter = inv(exp(exponent));
+                if (inter < UNIT) {
+                    DFF = DFF_MAX * (UNIT - inter);
+                }
             }
         }
 
