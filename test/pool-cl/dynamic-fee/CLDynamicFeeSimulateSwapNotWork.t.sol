@@ -239,6 +239,35 @@ contract CLDynamicFeeSimulateSwapNotWork is Test, PosmTestSetup {
         assertEq(lpFee_pool0, lpFee_pool1);
     }
 
+    function testFuzz_swap_with_same_fee_get_same_sqrtPriceAfterSwap(uint256 swapAmount, uint24 lpFee) public {
+        swapAmount = bound(swapAmount, 50 ether, 100 ether);
+        lpFee = uint24(bound(lpFee, 100, 200000)); // from 0.01% to 20%
+        bytes memory hookData = abi.encode(lpFee);
+        ICLRouterBase.CLSwapExactInputSingleParams memory params_pool0 =
+            ICLRouterBase.CLSwapExactInputSingleParams(key, true, uint128(swapAmount), 0, 0, hookData);
+
+        bytes memory hookData1 = abi.encode(lpFee);
+        ICLRouterBase.CLSwapExactInputSingleParams memory params_pool1 =
+            ICLRouterBase.CLSwapExactInputSingleParams(key2, true, uint128(swapAmount), 0, 0, hookData1);
+
+        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params_pool0));
+        bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
+
+        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params_pool1));
+        bytes memory data2 = planner.finalizeSwap(key2.currency0, key2.currency1, ActionConstants.MSG_SENDER);
+
+        v4Router.executeActions(data);
+        v4Router.executeActions(data2);
+        (uint160 sqrtPriceX96_pool0, int24 tick_pool0, uint24 protocolFee_pool0, uint24 lpFee_pool0) =
+            poolManager.getSlot0(poolId);
+        (uint160 sqrtPriceX96_pool1, int24 tick_pool1, uint24 protocolFee_pool1, uint24 lpFee_pool1) =
+            poolManager.getSlot0(poolId2);
+        // we will get same sqrtPriceX96 after swap with same fee
+        assertEq(sqrtPriceX96_pool0, sqrtPriceX96_pool1);
+        assertEq(tick_pool0, tick_pool1);
+        assertEq(lpFee_pool0, lpFee_pool1);
+    }
+
     // allow refund of ETH
     receive() external payable {}
 }

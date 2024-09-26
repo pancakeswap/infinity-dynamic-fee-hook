@@ -13,3 +13,6 @@ fs_permissions = [
     { access = "read", path = "./script/config" },
 ]
 evm_version = 'cancun'
+
+[fuzz]
+runs = 1000 # change this for higher number of fuzz/invariant locally
