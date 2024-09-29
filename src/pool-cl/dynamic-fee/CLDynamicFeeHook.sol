@@ -12,16 +12,20 @@ import {Currency} from "pancake-v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "pancake-v4-core/src/types/BeforeSwapDelta.sol";
 import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
 import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
+import {SafeCast} from "pancake-v4-core/src/libraries/SafeCast.sol";
 import {
     SD59x18, uUNIT, UNIT, convert, inv, exp, lt, gt, uEXP_MIN_THRESHOLD, EXP_MAX_INPUT
 } from "prb-math/SD59x18.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
+import {SqrtPriceBeforeLib} from "./libraries/SqrtPriceBeforeLib.sol";
 
 import {IPriceFeed} from "./interfaces/IPriceFeed.sol";
 
 contract CLDynamicFeeHook is CLBaseHook, Ownable {
     using PoolIdLibrary for PoolKey;
     using LPFeeLibrary for uint24;
+    using BalanceDeltaLibrary for BalanceDelta;
+    using SafeCast for *;
 
     struct PoolConfig {
         IPriceFeed priceFeed;
@@ -102,7 +106,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
                 beforeRemoveLiquidity: false,
                 afterRemoveLiquidity: false,
                 beforeSwap: true,
-                afterSwap: false,
+                afterSwap: true,
                 beforeDonate: false,
                 afterDonate: false,
                 beforeSwapReturnsDelta: false,
@@ -152,28 +156,38 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         return this.afterInitialize.selector;
     }
 
-    function beforeSwap(
+    function beforeSwap(address, PoolKey calldata key, ICLPoolManager.SwapParams calldata, bytes calldata)
+        external
+        override
+        poolManagerOnly
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        PoolId id = key.toId();
+        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
+        SqrtPriceBeforeLib.setSqrtPriceBefore(sqrtPriceX96Before);
+
+        return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+    }
+
+    function afterSwap(
         address,
         PoolKey calldata key,
         ICLPoolManager.SwapParams calldata params,
-        bytes calldata hookData
-    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
+        BalanceDelta delta,
+        bytes calldata
+    ) external override poolManagerOnly returns (bytes4, int128) {
         if (emergencyFlag) {
-            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+            return (this.afterSwap.selector, 0);
         }
 
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        if (_isSim) {
-            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-        }
-
-        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
+        uint160 sqrtPriceX96Before = SqrtPriceBeforeLib.getSqrtPriceBefore().toUint160();
         // TODO: Can check oracle price and sqrtPriceX96Before to skip the calculation, can save a lot of gas
         // if oracle_price  > sqrtPriceX96Before && zeroForOne == true , no need to calculate dynamic fee
         // if oracle_price  < sqrtPriceX96Before && zeroForOne == false , no need to calculate dynamic fee
-        uint160 sqrtPriceX96After = _simulateSwap(key, params, hookData);
+        (uint160 sqrtPriceX96After,,,) = poolManager.getSlot0(id);
 
         // Fix TODO : Can not use priceX96
         // when tick is -887272, sqrtPrice is 4295128739 , priceX96 is 4295128739 * 4295128739 / 2^96 = 0
@@ -184,10 +198,17 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             poolConfig.priceFeed, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
         );
         if (lpFee == 0) {
-            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+            return (this.afterSwap.selector, 0);
         }
+        uint256 tokenOut = params.zeroForOne ? int256(delta.amount1()).toUint256() : int256(delta.amount0()).toUint256();
 
-        return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, lpFee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
+        uint256 dynamicFeeAmount = tokenOut * lpFee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+        vault.take(params.zeroForOne ? key.currency1 : key.currency0, address(this), dynamicFeeAmount);
+        // TODO: How to use dynamic fee
+        // 1. donate to v4 pool
+        // 2. distribute by off-chain farming
+
+        return (this.afterSwap.selector, dynamicFeeAmount.toInt128());
     }
 
     /// @dev Get the dynamic fee for a swap
@@ -293,44 +314,5 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             return 0;
         }
         return lpFee;
-    }
-
-    /// @dev Simulate `swap`
-    function _simulateSwap(PoolKey calldata key, ICLPoolManager.SwapParams calldata params, bytes calldata hookData)
-        internal
-        returns (uint160 sqrtPriceX96)
-    {
-        _isSim = true;
-        try this.simulateSwap(key, params, hookData) {
-            revert();
-        } catch (bytes memory reason) {
-            bytes4 selector;
-            assembly {
-                selector := mload(add(reason, 0x20))
-            }
-            if (selector != SwapAndRevert.selector) {
-                revert();
-            }
-            // Extract data by trimming the custom error selector (first 4 bytes)
-            bytes memory data = new bytes(reason.length - 4);
-            for (uint256 i = 4; i < reason.length; ++i) {
-                data[i - 4] = reason[i];
-            }
-            sqrtPriceX96 = abi.decode(data, (uint160));
-        }
-        _isSim = false;
-    }
-
-    /// @dev Revert a custom error on purpose to achieve simulation of `swap`
-    function simulateSwap(PoolKey calldata key, ICLPoolManager.SwapParams calldata params, bytes calldata hookData)
-        external
-    {
-        // Only this contract can call this function
-        if (msg.sender != address(this)) {
-            revert NotDynamicFeeHook();
-        }
-        poolManager.swap(key, params, hookData);
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
-        revert SwapAndRevert(sqrtPriceX96);
     }
 }

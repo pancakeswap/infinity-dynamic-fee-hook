@@ -164,13 +164,6 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         assertEq(baseLpFee, DEFAULT_FEE);
     }
 
-    function test_simulate_swap_not_from_hooks_revert() public {
-        ICLPoolManager.SwapParams memory params =
-            ICLPoolManager.SwapParams({zeroForOne: true, amountSpecified: 0, sqrtPriceLimitX96: 0});
-        vm.expectRevert(CLDynamicFeeHook.NotDynamicFeeHook.selector);
-        dynamicFeeHook.simulateSwap(key, params, ZERO_BYTES);
-    }
-
     function test_swap_no_DFF() external {
         uint128 liquidity = poolManager.getLiquidity(poolId);
         assertGt(liquidity, 0);
@@ -187,7 +180,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         vm.expectEmit(true, true, true, true);
         emit Swap(
             poolId,
-            address(dynamicFeeHook),
+            address(v4Router),
             -1 ether,
             997400509299197405,
             sqrtPriceX96AfterSwap,
