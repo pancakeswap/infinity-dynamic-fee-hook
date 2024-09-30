@@ -258,7 +258,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         }
 
         // IndexPremium(IP) = ABS (priceX96Oracle/priceX96Before - -1)
-        // ipX96 = IP * 2 ** 96
+        // ipX96 = ABS(priceX96Oracle * 2 ** 96 / priceX96Before - 2 ** 96)
         uint256 ipX96;
         {
             uint256 r = FullMath.mulDiv(priceX96Oracle, FixedPoint96.Q96, priceX96Before);
@@ -267,15 +267,19 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
 
         // PriceImpactFactor(PIF) = SF * IP
         // pifX96 = PIF * 2 ** 96
+        //        = SF * IP * 2 ** 96
+        //        = sfX96 / FixedPoint96.Q96 * ipX96 / FixedPoint96.Q96 * FixedPoint96.Q96
+        //        = sfX96 * ipX96 / FixedPoint96.Q96
         uint256 pifX96 = FullMath.mulDiv(sfX96, ipX96, FixedPoint96.Q96);
 
-        // DFF = max{DFF_max * (1 - e ^ -(pifX96 - fX96) / fx96), 0} = max{DFF_max * (1 - 1/ e ^ (pifX96 - fX96) / fx96), 0}
+        // DFF = max{DFF_max * (1 - e ^ -(pifX96 - fX96) / fx96), 0}
+        //     = max{DFF_max * (1 - 1/ e ^ (pifX96 - fX96) / fx96), 0}
         SD59x18 DFF;
         // convert(int256 x) : Converts a simple integer to SD59x18 by multiplying it by `UNIT(1e18)`.
         // SD59x18 x =  SD59x18.wrap(x_int256 * uUNIT)
         SD59x18 DFF_MAX = convert(int256(int24(DFF_max)));
         // fx: fixed fee tier
-        // fX96 = fx * 2 ** 96
+        // fX96 = fx * 2 ** 96 = baseLpFee * 2 ** 96 / ONE_HUNDRED_PERCENT_FEE
         uint256 fX96 = FullMath.mulDiv(baseLpFee, FixedPoint96.Q96, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
         if (pifX96 > fX96) {
             // inv(SD59x18 x) : 1/x, Calculates the inverse of x.
