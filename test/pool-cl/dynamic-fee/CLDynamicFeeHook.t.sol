@@ -32,9 +32,11 @@ import {CLDynamicFeeHook} from "../../../src/pool-cl/dynamic-fee/CLDynamicFeeHoo
 import {IPriceFeed} from "../../../src/pool-cl/dynamic-fee/interfaces/IPriceFeed.sol";
 import {PriceFeed} from "../../../src/pool-cl/dynamic-fee/PriceFeed.sol";
 import {MockAggregatorV3} from "../../helpers/MockAggregatorV3.sol";
+// import "forge-std/console2.sol";
 
 contract CLDynamicFeeHookTest is Test, PosmTestSetup {
     using Planner for Plan;
+    using CurrencyLibrary for Currency;
 
     MockAggregatorV3 defaultOracle;
     PriceFeed priceFeed;
@@ -53,6 +55,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
 
     address alice = makeAddr("ALICE");
     address bob = makeAddr("BOB");
+    address hookOwner = makeAddr("HOOK_OWNER");
 
     // 0.25% fee
     uint24 DEFAULT_FEE = LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / 400;
@@ -194,6 +197,96 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         // charge tokenIn fee
         assertGt(feeGrowthGlobal0x128, 0);
         assertEq(feeGrowthGlobal1x128, 0);
+    }
+
+    function test_swap_dynamic_fee() external {
+        // set oracle price to 0.97
+        defaultOracle.updateAnswer(97 * 10 ** 16);
+
+        uint128 liquidity = poolManager.getLiquidity(poolId);
+        assertGt(liquidity, 0);
+
+        ICLRouterBase.CLSwapExactInputSingleParams memory params =
+            ICLRouterBase.CLSwapExactInputSingleParams(key, true, 180 ether, 0, 0, bytes(""));
+
+        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
+        bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
+        uint160 sqrtPriceX96AfterSwap = 4295128740;
+        uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96AfterSwap);
+        assertGt(dynamic_fee, 0);
+        assertEq(dynamic_fee, 49999);
+
+        int128 tokenOut = 148873216119575134690;
+
+        vm.expectEmit(true, true, true, true);
+        emit Swap(
+            poolId,
+            address(v4Router),
+            -151501787789050894882,
+            tokenOut,
+            sqrtPriceX96AfterSwap,
+            0,
+            -887272,
+            DEFAULT_FEE,
+            0
+        );
+        v4Router.executeActions(data);
+        (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
+        // charge tokenIn fee
+        assertGt(feeGrowthGlobal0x128, 0);
+        assertEq(feeGrowthGlobal1x128, 0);
+        uint256 dynamicFeeInHook = currency1.balanceOf(address(dynamicFeeHook));
+        uint256 dynamicFeeAmount = uint256(uint128(tokenOut)) * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+        assertEq(dynamicFeeInHook, dynamicFeeAmount);
+    }
+
+    function test_collect_swap_dynamic_fee() external {
+        // set oracle price to 0.97
+        defaultOracle.updateAnswer(97 * 10 ** 16);
+
+        uint128 liquidity = poolManager.getLiquidity(poolId);
+        assertGt(liquidity, 0);
+
+        ICLRouterBase.CLSwapExactInputSingleParams memory params =
+            ICLRouterBase.CLSwapExactInputSingleParams(key, true, 180 ether, 0, 0, bytes(""));
+
+        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
+        bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
+        uint160 sqrtPriceX96AfterSwap = 4295128740;
+        uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96AfterSwap);
+        assertGt(dynamic_fee, 0);
+        assertEq(dynamic_fee, 49999);
+
+        int128 tokenOut = 148873216119575134690;
+
+        vm.expectEmit(true, true, true, true);
+        emit Swap(
+            poolId,
+            address(v4Router),
+            -151501787789050894882,
+            tokenOut,
+            sqrtPriceX96AfterSwap,
+            0,
+            -887272,
+            DEFAULT_FEE,
+            0
+        );
+        v4Router.executeActions(data);
+        (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
+        // charge tokenIn fee
+        assertGt(feeGrowthGlobal0x128, 0);
+        assertEq(feeGrowthGlobal1x128, 0);
+        uint256 dynamicFeeInHook = currency1.balanceOf(address(dynamicFeeHook));
+        uint256 dynamicFeeAmount = uint256(uint128(tokenOut)) * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+        assertEq(dynamicFeeInHook, dynamicFeeAmount);
+
+        dynamicFeeHook.transferOwnership(hookOwner);
+        vm.startPrank(hookOwner);
+        uint256 hookOwnerCurreny1BalanceBefore = currency1.balanceOf(hookOwner);
+        assertEq(hookOwnerCurreny1BalanceBefore, 0);
+        dynamicFeeHook.collectDynamicFee(currency1);
+        uint256 hookOwnerCurreny1BalanceAfter = currency1.balanceOf(hookOwner);
+        assertEq(hookOwnerCurreny1BalanceAfter, dynamicFeeAmount);
     }
 
     // allow refund of ETH

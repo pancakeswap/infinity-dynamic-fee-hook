@@ -8,7 +8,7 @@ import {LPFeeLibrary} from "pancake-v4-core/src/libraries/LPFeeLibrary.sol";
 import {PoolKey} from "pancake-v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "pancake-v4-core/src/types/PoolId.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "pancake-v4-core/src/types/BalanceDelta.sol";
-import {Currency} from "pancake-v4-core/src/types/Currency.sol";
+import {Currency, CurrencyLibrary} from "pancake-v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "pancake-v4-core/src/types/BeforeSwapDelta.sol";
 import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
 import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
@@ -26,6 +26,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     using LPFeeLibrary for uint24;
     using BalanceDeltaLibrary for BalanceDelta;
     using SafeCast for *;
+    using CurrencyLibrary for Currency;
 
     struct PoolConfig {
         IPriceFeed priceFeed;
@@ -110,7 +111,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
                 beforeDonate: false,
                 afterDonate: false,
                 beforeSwapReturnsDelta: false,
-                afterSwapReturnsDelta: false,
+                afterSwapReturnsDelta: true,
                 afterAddLiquidiyReturnsDelta: false,
                 afterRemoveLiquidiyReturnsDelta: false
             })
@@ -208,7 +209,6 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // TODO: How to use dynamic fee
         // 1. donate to v4 pool
         // 2. distribute by off-chain farming
-
         return (this.afterSwap.selector, dynamicFeeAmount.toInt128());
     }
 
@@ -316,4 +316,10 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         }
         return lpFee;
     }
+
+    function collectDynamicFee(Currency currency) external onlyOwner {
+        currency.transfer(msg.sender, currency.balanceOfSelf());
+    }
+
+    receive() external payable {}
 }
