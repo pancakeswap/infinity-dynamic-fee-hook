@@ -14,7 +14,17 @@ import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolMana
 import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
 import {SafeCast} from "pancake-v4-core/src/libraries/SafeCast.sol";
 import {
-    SD59x18, uUNIT, UNIT, convert, inv, exp, lt, gt, uEXP_MIN_THRESHOLD, EXP_MAX_INPUT
+    SD59x18,
+    uUNIT,
+    UNIT,
+    convert,
+    inv,
+    exp,
+    lt,
+    gt,
+    sub,
+    uEXP_MIN_THRESHOLD,
+    EXP_MAX_INPUT
 } from "prb-math/SD59x18.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {SqrtPriceBeforeLib} from "./libraries/SqrtPriceBeforeLib.sol";
@@ -288,8 +298,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             // exponent_SD59x18_int256 =  int256( (pifX96 - fX96) * uUNIT / fx96 )
             // exponent = SD59x18.wrap(exponent_SD59x18_int256)
             SD59x18 exponent = SD59x18.wrap(int256(FullMath.mulDiv(pifX96 - fX96, uint256(uUNIT), fX96)));
-            // when exponent > EXP_MAX_INPUT, inter(1/e^exponent) will be almost equal to 0, so DFF will be be almost equal to DFF_MAX
-            if (gt(exponent, EXP_MAX_INPUT)) {
+            // when exponent > EXP_MAX_INPUT - UNIT, inter(1/e^exponent) will be almost equal to 0, so DFF will be be almost equal to DFF_MAX
+            if (gt(exponent, sub(EXP_MAX_INPUT, UNIT))) {
                 DFF = DFF_MAX;
             } else {
                 SD59x18 inter = inv(exp(exponent));
