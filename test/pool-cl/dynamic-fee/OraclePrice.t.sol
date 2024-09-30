@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
+import {TickMath} from "pancake-v4-core/src/pool-cl/libraries/TickMath.sol";
+import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
 import {MockAggregatorV3} from "../../helpers/MockAggregatorV3.sol";
 import {PriceFeedLib} from "../../../src/pool-cl/dynamic-fee/libraries/PriceFeedLib.sol";
 
@@ -133,7 +135,7 @@ contract OraclePriceTest is Test {
     }
 
     /// @dev Calculate the reverse order price
-    function calaculate_reverse_order_price(uint256 price) public view returns (uint256) {
+    function calaculate_reverse_order_price(uint256 price) internal view returns (uint256) {
         uint8 oracleDecimals = defaultOracle.decimals();
         return PriceFeedLib.calculateReverseOrderPrice(price, oracleDecimals);
     }
@@ -144,7 +146,7 @@ contract OraclePriceTest is Test {
         uint8 oracle0TargetTokenIndex,
         MockAggregatorV3 _oracle1,
         uint8 oracle1TargetTokenIndex
-    ) public view returns (uint256) {
+    ) internal view returns (uint256) {
         (, int256 oracle0Answer,,,) = _oracle0.latestRoundData();
         (, int256 oracle1Answer,,,) = _oracle1.latestRoundData();
         uint8 oracle0Decimals = _oracle0.decimals();
@@ -158,5 +160,31 @@ contract OraclePriceTest is Test {
             oracle1TargetTokenIndex,
             oracle1Decimals
         );
+    }
+
+    /// @dev calculate v4 pool PriceX96 based on oracle price
+    /// check tick between -3000_3000 and 300_0000
+    /// 1.0001^ 300000 = 1.068×10^13
+    /// 1.0001^ -300000 = 9.36×10^-14
+    function testFuzz_calculate_v4_pool_price(uint256 tick_abs, bool isPositive) public {
+        tick_abs = bound(tick_abs, 0, 300000);
+        int24 tick;
+        if (isPositive) {
+            tick = int24(uint24(tick_abs));
+        } else {
+            tick = -int24(uint24(tick_abs));
+        }
+
+        uint256 sqrtPriceX96 = TickMath.getSqrtRatioAtTick(tick);
+        uint256 oraclePriceWithDefaultDecimals;
+        uint256 priceX96;
+        // when tick is -300000, prixX96 is 7425001144658882
+        // when tick is smaller than -665430, prixX96 is 0
+        priceX96 = FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, 2 ** 96);
+        oraclePriceWithDefaultDecimals = FullMath.mulDiv(priceX96, 10 ** ORACLE_DEFAULT_DECIMALS, 2 ** 96);
+        uint256 oracleGetPriceX96 =
+            PriceFeedLib.calculatePriceX96(oraclePriceWithDefaultDecimals, ORACLE_DEFAULT_DECIMALS, 18, 18);
+
+        assertApproxEqRel(priceX96, oracleGetPriceX96, 1 ether / 10000);
     }
 }
