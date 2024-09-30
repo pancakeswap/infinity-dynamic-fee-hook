@@ -192,7 +192,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
 
         // Fix TODO : Can not use priceX96
         // when tick is -887272, sqrtPrice is 4295128739 , priceX96 is 4295128739 * 4295128739 / 2^96 = 0
-        // when tick between -665430 and -887272, priceX96Before will be zero
+        // when tick between -665430 and -887272, priceX96 will be zero
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
 
