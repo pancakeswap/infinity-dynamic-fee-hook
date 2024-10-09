@@ -162,26 +162,40 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
-        PoolId id = key.toId();
-        PoolConfig memory poolConfig = poolConfigs[id];
-
         // Will skip the dynamic fee calculation if the simulation flag is true
         if (SimulationFlag.getSimulationFlag()) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
-        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
-        // TODO: Can check oracle price and sqrtPriceX96Before to skip the calculation, can save a lot of gas
-        // if oracle_price  > sqrtPriceX96Before && zeroForOne == true , no need to calculate dynamic fee
-        // if oracle_price  < sqrtPriceX96Before && zeroForOne == false , no need to calculate dynamic fee
-        uint160 sqrtPriceX96After = _simulateSwap(key, params, hookData);
+        PoolId id = key.toId();
+        PoolConfig memory poolConfig = poolConfigs[id];
 
+        uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
+        // If the oracle price is not available, we will skip dynamic fee calculation
+        if (priceX96Oracle == 0) {
+            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        }
+
+        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
         // Fix TODO : Can not use priceX96
         // when tick is -887272, sqrtPrice is 4295128739 , priceX96 is 4295128739 * 4295128739 / 2^96 = 0
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
-        uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
-        uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
 
+        // when zeroForOne is true, priceX96After is smaller than priceX96Before, so we can skip the calculation when priceX96Oracle is bigger than priceX96Before
+        // when zeroForOne is false, priceX96After is larger than priceX96Before, so we can skip the calculation when priceX96Oracle is smaller than priceX96Before
+        // SF = max{priceX96After - priceX96Before / priceX96Oracle - priceX96Before , 0}
+        // priceX96After - priceX96Before / priceX96Oracle - priceX96Before is negative in this case
+        // so SF is 0, we can skip simualtion, will save some gas
+        if (
+            params.zeroForOne && priceX96Oracle > priceX96Before
+                || !params.zeroForOne && priceX96Oracle < priceX96Before
+        ) {
+            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        }
+        // get the sqrt price after the swap by simulating the swap
+        // NOTICE: The swap simulation uses the base LP fee, so the simulated price may differ from the actual swap price, which uses a dynamic fee.
+        uint160 sqrtPriceX96After = _simulateSwap(key, params, hookData);
+        uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
         uint24 lpFee = _calculateDynamicFee(
             priceX96Oracle, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
         );
@@ -203,6 +217,10 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
         uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
+        // If the oracle price is not available, we will skip dynamic fee calculation
+        if (priceX96Oracle == 0) {
+            return 0;
+        }
 
         return _calculateDynamicFee(
             priceX96Oracle, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
@@ -218,11 +236,6 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         uint24 baseLpFee,
         uint24 DFF_max
     ) internal pure returns (uint24) {
-        // If the oracle price is not available, we can't calculate the dynamic fee
-        if (priceX96Oracle == 0) {
-            return 0;
-        }
-
         // ScaledFactor(SF) = max{priceX96After - priceX96Before / priceX96Oracle - priceX96Before , 0}
         // sfX96 = SF * 2 ** 96
         uint256 sfX96;
@@ -235,6 +248,10 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
                 sfX96 =
                     FullMath.mulDiv(priceX96Before - priceX96After, FixedPoint96.Q96, priceX96Before - priceX96Oracle);
             }
+        }
+
+        if (sfX96 == 0) {
+            return 0;
         }
 
         // IndexPremium(IP) = ABS (priceX96Oracle/priceX96Before - -1)
@@ -297,7 +314,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         return lpFee;
     }
 
-    /// @dev Simulate `swap`
+    /// @dev The swap simulation uses the base LP fee, so the simulated price may differ from the actual swap price, which uses a dynamic fee.
     function _simulateSwap(PoolKey calldata key, ICLPoolManager.SwapParams calldata params, bytes calldata hookData)
         internal
         returns (uint160 sqrtPriceX96)
