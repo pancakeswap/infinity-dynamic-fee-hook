@@ -225,6 +225,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
     function test_swap_with_dynamic_fee() external {
         // set oracle price to 0.8
         defaultOracle.updateAnswer(80 * 10 ** 16);
+        uint160 priceX96Oracle = priceFeed.getPriceX96();
+        assertEq(uint256(priceX96Oracle), 8 * FixedPoint96.Q96 / 10);
 
         uint128 liquidity = poolManager.getLiquidity(poolId);
         assertGt(liquidity, 0);
@@ -239,6 +241,20 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         uint160 sqrtPriceX96AfterSwap = 78051446342915679598492659642;
         uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96BySimulation);
         assertGt(dynamic_fee, 0);
+        /*
+        Manual verification of dynamic fee calculation process
+
+        price_oracle = 0.8
+        price_before = 1 // tick = 0
+        price_after = 1.0001 ^ -6028 = 0.5472936069292484 // tick = - 6028
+        SF = price_after - price_before / price_oracle - price_before = 2.2635319653537582
+        IP = 1 - price_oracle / price_before = 0.2
+        PIF = SF * IP = 0.45270639307065164
+        DFF_MAX = 0.25
+        F = 0.0025
+        DFF = DFF_MAX * (1 - e^ -(PIF - F) / F) = 0.25
+        dynamic_fee = DFF * PIF = 0.113167
+        */
         assertEq(dynamic_fee, 113167); // 11.3167%
 
         vm.expectEmit(true, true, true, true);
