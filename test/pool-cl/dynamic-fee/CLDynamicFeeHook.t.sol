@@ -258,6 +258,20 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         assertEq(dynamic_fee, 113167); // 11.3167%
 
         vm.expectEmit(true, true, true, true);
+        // Simulation swap event
+        emit Swap(
+            poolId,
+            address(dynamicFeeHook),
+            -170 ether,
+            158986349517760497633,
+            sqrtPriceX96BySimulation,
+            10000000000000000000000,
+            -6028,
+            DEFAULT_FEE,
+            0
+        );
+        vm.expectEmit(true, true, true, true);
+        // Real swap event
         emit Swap(
             poolId,
             address(v4Router),
