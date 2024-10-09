@@ -180,9 +180,10 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // when tick is -887272, sqrtPrice is 4295128739 , priceX96 is 4295128739 * 4295128739 / 2^96 = 0
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
+        uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
 
         uint24 lpFee = _calculateDynamicFee(
-            poolConfig.priceFeed, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
+            priceX96Oracle, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
         );
         if (lpFee == 0) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
@@ -201,22 +202,22 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
+        uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
 
         return _calculateDynamicFee(
-            poolConfig.priceFeed, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
+            priceX96Oracle, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
         );
     }
 
     // ========================= Internal Functions ============================
 
     function _calculateDynamicFee(
-        IPriceFeed priceFeed,
+        uint160 priceX96Oracle,
         uint160 priceX96Before,
         uint160 priceX96After,
         uint24 baseLpFee,
         uint24 DFF_max
-    ) internal view returns (uint24) {
-        uint256 priceX96Oracle = priceFeed.getPriceX96();
+    ) internal pure returns (uint24) {
         // If the oracle price is not available, we can't calculate the dynamic fee
         if (priceX96Oracle == 0) {
             return 0;
