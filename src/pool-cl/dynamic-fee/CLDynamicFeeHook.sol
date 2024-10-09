@@ -174,7 +174,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
+        uint160 priceX96Oracle = _getOraclePriceX96(poolConfig.priceFeed);
         // If the oracle price is not available, we will skip dynamic fee calculation
         if (priceX96Oracle == 0) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
@@ -217,14 +217,15 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
-        uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
-        uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
-        uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
+        uint160 priceX96Oracle = _getOraclePriceX96(poolConfig.priceFeed);
         // If the oracle price is not available, we will skip dynamic fee calculation
         if (priceX96Oracle == 0) {
             return 0;
         }
+
+        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
+        uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
+        uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
 
         return _calculateDynamicFee(
             priceX96Oracle, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
@@ -355,5 +356,14 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             sqrtPriceX96 = abi.decode(data, (uint160));
         }
         SimulationFlag.setSimulationFlag(false);
+    }
+
+    /// @dev Get the oracle price , and make sure hook can still work even if the oracle is not available
+    function _getOraclePriceX96(IPriceFeed priceFeed) internal view returns (uint160 priceX96Oracle) {
+        try priceFeed.getPriceX96() returns (uint160 priceX96) {
+            priceX96Oracle = priceX96;
+        } catch {
+            // Do nothing
+        }
     }
 }
