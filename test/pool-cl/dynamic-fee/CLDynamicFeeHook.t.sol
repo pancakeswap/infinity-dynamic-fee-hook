@@ -28,8 +28,7 @@ import {ActionConstants} from "pancake-v4-periphery/src/libraries/ActionConstant
 import {LPFeeLibrary} from "pancake-v4-core/src/libraries/LPFeeLibrary.sol";
 import {CLPoolParametersHelper} from "pancake-v4-core/src/pool-cl/libraries/CLPoolParametersHelper.sol";
 import {PosmTestSetup} from "pancake-v4-periphery/test/pool-cl/shared/PosmTestSetup.sol";
-// import {CLLiquidityOperations} from "pancake-v4-periphery/test/pool-cl/shared/CLLiquidityOperations.sol";
-// import {PositionConfig, PositionConfigLibrary}  from "pancake-v4-periphery/src/pool-cl/libraries/PositionConfig.sol";
+import {CLLiquidityOperations} from "pancake-v4-periphery/test/pool-cl/shared/CLLiquidityOperations.sol";
 import {CLDynamicFeeHook} from "../../../src/pool-cl/dynamic-fee/CLDynamicFeeHook.sol";
 import {IPriceFeed} from "../../../src/pool-cl/dynamic-fee/interfaces/IPriceFeed.sol";
 import {PriceFeed} from "../../../src/pool-cl/dynamic-fee/PriceFeed.sol";
@@ -38,6 +37,7 @@ import {MockAggregatorV3} from "../../helpers/MockAggregatorV3.sol";
 
 contract CLDynamicFeeHookTest is Test, PosmTestSetup {
     using Planner for Plan;
+    using CurrencyLibrary for Currency;
 
     MockAggregatorV3 defaultOracle;
     PriceFeed priceFeed;
@@ -229,8 +229,9 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         uint128 liquidity = poolManager.getLiquidity(poolId);
         assertGt(liquidity, 0);
 
+        uint128 swap_amount = 170 ether;
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
-            ICLRouterBase.CLSwapExactInputSingleParams(key, true, 170 ether, 0, 0, bytes(""));
+            ICLRouterBase.CLSwapExactInputSingleParams(key, true, swap_amount, 0, 0, bytes(""));
 
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
@@ -257,6 +258,18 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         // charge tokenIn fee
         assertGt(feeGrowthGlobal0x128, 0);
         assertEq(feeGrowthGlobal1x128, 0);
+
+        // dynamic_fee_amount = tokenInAmount * dynamic_fee / 1_000_000 - 1;
+        // -1 is for calculation precision loss
+        uint256 dynamic_fee_curreny0_amount = swap_amount * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - 1;
+        assertEq(dynamic_fee_curreny0_amount, 19238389999999999999);
+        uint256 currency0_balance_before = currency0.balanceOfSelf();
+        // collect fees
+        bytes memory collect_calldata = CLLiquidityOperations.getCollectEncoded(1, ZERO_BYTES);
+        lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
+
+        uint256 currency0_balance_after = currency0.balanceOfSelf();
+        assertEq(currency0_balance_after - currency0_balance_before, dynamic_fee_curreny0_amount);
     }
 
     receive() external payable {}
