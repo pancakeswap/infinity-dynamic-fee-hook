@@ -56,8 +56,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
 
     // 0.25% fee
     uint24 DEFAULT_FEE = LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / 400;
-    // MAX DFF 5%
-    uint24 MAX_DFF = LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / 20;
+    // MAX DFF 25%
+    uint24 MAX_DFF = LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / 4;
 
     // v4 swap event
     event Swap(
@@ -171,7 +171,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         dynamicFeeHook.simulateSwap(key, params, ZERO_BYTES);
     }
 
-    function test_swap_no_DFF() external {
+    function test_swap_no_dynamic_fee() external {
         uint128 liquidity = poolManager.getLiquidity(poolId);
         assertGt(liquidity, 0);
 
@@ -187,7 +187,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         vm.expectEmit(true, true, true, true);
         emit Swap(
             poolId,
-            address(dynamicFeeHook),
+            address(v4Router),
             -1 ether,
             997400509299197405,
             sqrtPriceX96AfterSwap,
@@ -203,6 +203,5 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         assertEq(feeGrowthGlobal1x128, 0);
     }
 
-    // allow refund of ETH
     receive() external payable {}
 }
