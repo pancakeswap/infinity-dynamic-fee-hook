@@ -238,7 +238,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
         uint160 sqrtPriceX96BySimulation = 58614422236967949585661808030;
-        uint160 sqrtPriceX96AfterSwap = 78051446342915679598492659642;
+        uint160 sqrtPriceX96AfterSwap = 58649458864964066501106071928;
         uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96BySimulation);
         assertGt(dynamic_fee, 0);
         /*
@@ -253,9 +253,10 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         DFF_MAX = 0.25
         F = 0.0025
         DFF = DFF_MAX * (1 - e^ -(PIF - F) / F) = 0.25
-        dynamic_fee = DFF * PIF = 0.113167
+        dynamic_fee = DFF * Min(PIF, 0.2) = 0.25 * 0.2 = 0.05
+        dynamic_fee = 0.049999 // calculation precision loss
         */
-        assertEq(dynamic_fee, 113167); // 11.3167%
+        assertEq(dynamic_fee, 49999); // 11.3167%
 
         vm.expectEmit(true, true, true, true);
         // Simulation swap event
@@ -276,10 +277,10 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
             poolId,
             address(v4Router),
             -170 ether,
-            148522461458928893119,
+            154564105345455116063,
             sqrtPriceX96AfterSwap,
             10000000000000000000000,
-            -300,
+            -6016,
             dynamic_fee,
             0
         );
@@ -292,11 +293,13 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         // dynamic_fee_amount = tokenInAmount * dynamic_fee / 1_000_000 - 1;
         // -1 is for calculation precision loss
         uint256 dynamic_fee_curreny0_amount = swap_amount * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - 1;
-        assertEq(dynamic_fee_curreny0_amount, 19238389999999999999);
+        assertEq(dynamic_fee_curreny0_amount, 8499829999999999999);
         uint256 currency0_balance_before = currency0.balanceOfSelf();
         // collect fees
         bytes memory collect_calldata = CLLiquidityOperations.getCollectEncoded(1, ZERO_BYTES);
         lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
+        bytes memory collect_calldata_2 = CLLiquidityOperations.getCollectEncoded(2, ZERO_BYTES);
+        lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
 
         uint256 currency0_balance_after = currency0.balanceOfSelf();
         assertEq(currency0_balance_after - currency0_balance_before, dynamic_fee_curreny0_amount);

@@ -321,7 +321,11 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
 
         // convert(SD59x18 x) : Converts an SD59x18 number to a simple integer by dividing it by `UNIT(1e18)`.
         uint24 DFF_uint24 = uint24(int24(convert(DFF)));
-        // LPFee = DFF_uint24 * PIF = DFF_uint24 * pifX96 / 2 ** 96
+        // LPFee = DFF_uint24 * PIF = DFF_uint24 * Min(pifX96, 0.2 * 2 ** 96) / 2 ** 96
+        uint256 pifX96_max = 2 * FixedPoint96.Q96 / 10;
+        if (pifX96 > pifX96_max) {
+            pifX96 = pifX96_max;
+        }
         uint24 lpFee = uint24(FullMath.mulDiv(DFF_uint24, pifX96, FixedPoint96.Q96));
         // TODO : Need to add one more parameter about max dynamic fee
         // DF_max : dynamic fee max
