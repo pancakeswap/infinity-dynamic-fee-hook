@@ -302,5 +302,24 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         assertEq(currency0_balance_after - currency0_balance_before, dynamic_fee_curreny0_amount);
     }
 
+    function test_oracle_issue_not_affect_hook() external {
+        defaultOracle.updateAnswer(80 * 10 ** 16);
+        defaultOracle.updateMockOracleIssue(true);
+        vm.expectRevert();
+        priceFeed.getPriceX96();
+
+        uint128 liquidity = poolManager.getLiquidity(poolId);
+        assertGt(liquidity, 0);
+
+        uint128 swap_amount = 170 ether;
+        ICLRouterBase.CLSwapExactInputSingleParams memory params =
+            ICLRouterBase.CLSwapExactInputSingleParams(key, true, swap_amount, 0, 0, bytes(""));
+
+        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
+        bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
+
+        v4Router.executeActions(data);
+    }
+
     receive() external payable {}
 }

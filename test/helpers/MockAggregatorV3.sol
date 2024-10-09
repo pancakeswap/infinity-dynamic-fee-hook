@@ -17,6 +17,7 @@ contract MockAggregatorV3 is AggregatorV3Interface {
     int256 public latestAnswer;
     uint256 public latestTimestamp;
     uint256 public latestRound;
+    bool public mockOracleIssue;
 
     mapping(uint256 => int256) public getAnswer;
     mapping(uint256 => uint256) public getTimestamp;
@@ -45,6 +46,10 @@ contract MockAggregatorV3 is AggregatorV3Interface {
         getStartedAt[latestRound] = _startedAt;
     }
 
+    function updateMockOracleIssue(bool _mockOracleIssue) public {
+        mockOracleIssue = _mockOracleIssue;
+    }
+
     function getRoundData(uint80 _roundId)
         external
         view
@@ -60,13 +65,18 @@ contract MockAggregatorV3 is AggregatorV3Interface {
         override
         returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
     {
-        return (
-            uint80(latestRound),
-            getAnswer[latestRound],
-            getStartedAt[latestRound],
-            getTimestamp[latestRound],
-            uint80(latestRound)
-        );
+        // can set this to true to test how your contract will handle failing price updates
+        if (mockOracleIssue) {
+            revert();
+        } else {
+            return (
+                uint80(latestRound),
+                getAnswer[latestRound],
+                getStartedAt[latestRound],
+                getTimestamp[latestRound],
+                uint80(latestRound)
+            );
+        }
     }
 
     function description() external pure override returns (string memory) {
