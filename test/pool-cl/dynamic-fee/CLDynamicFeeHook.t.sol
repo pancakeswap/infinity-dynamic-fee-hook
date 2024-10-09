@@ -231,14 +231,14 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         uint128 liquidity = poolManager.getLiquidity(poolId);
         assertGt(liquidity, 0);
 
-        uint128 swap_amount = 170 ether;
+        uint128 swap_amount = 155 ether;
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
             ICLRouterBase.CLSwapExactInputSingleParams(key, true, swap_amount, 0, 0, bytes(""));
 
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
-        uint160 sqrtPriceX96BySimulation = 58614422236967949585661808030;
-        uint160 sqrtPriceX96AfterSwap = 58649458864964066501106071928;
+        uint160 sqrtPriceX96BySimulation = 58679377533000008502924125879;
+        uint160 sqrtPriceX96AfterSwap = 78078456038875822504588633881;
         uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96BySimulation);
         assertGt(dynamic_fee, 0);
         /*
@@ -246,10 +246,10 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
 
         price_oracle = 0.8
         price_before = 1 // tick = 0
-        price_after = 1.0001 ^ -6028 = 0.5472936069292484 // tick = - 6028
-        SF = price_after - price_before / price_oracle - price_before = 2.2635319653537582
+        price_after = 1.0001 ^ -6006 = 0.5484989179559573 // tick = - 6006
+        SF = price_after - price_before / price_oracle - price_before = 2.257505410220214
         IP = 1 - price_oracle / price_before = 0.2
-        PIF = SF * IP = 0.45270639307065164
+        PIF = SF * IP = 0.4515010820440428
         DFF_MAX = 0.25
         F = 0.0025
         DFF = DFF_MAX * (1 - e^ -(PIF - F) / F) = 0.25
@@ -263,11 +263,11 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         emit Swap(
             poolId,
             address(dynamicFeeHook),
-            -170 ether,
-            158986349517760497633,
+            -155 ether,
+            150787838537480690636,
             sqrtPriceX96BySimulation,
             10000000000000000000000,
-            -6028,
+            -6006,
             DEFAULT_FEE,
             0
         );
@@ -276,11 +276,11 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         emit Swap(
             poolId,
             address(v4Router),
-            -170 ether,
-            154564105345455116063,
+            -155 ether,
+            145113358546150870959,
             sqrtPriceX96AfterSwap,
             10000000000000000000000,
-            -6016,
+            -293,
             dynamic_fee,
             0
         );
@@ -293,7 +293,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
         // dynamic_fee_amount = tokenInAmount * dynamic_fee / 1_000_000 - 1;
         // -1 is for calculation precision loss
         uint256 dynamic_fee_curreny0_amount = swap_amount * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - 1;
-        assertEq(dynamic_fee_curreny0_amount, 8499829999999999999);
+        assertEq(dynamic_fee_curreny0_amount, 7749844999999999999);
         uint256 currency0_balance_before = currency0.balanceOfSelf();
         // collect fees
         bytes memory collect_calldata = CLLiquidityOperations.getCollectEncoded(1, ZERO_BYTES);
