@@ -1,27 +1,12 @@
 ## Pancake V4 Dynamic Fee Hooks
 
-## Usage
+## Running test
 
-### Build
+1. Install dependencies with `forge install`
+2. Run test with `forge test --isolate`
 
-```shell
-$ forge build
-```
+See https://github.com/pancakeswap/pancake-v4-core/pull/35 on why `--isolate` flag is used.
 
-### Test
+## Update dependencies
 
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
+1. Run `forge update`

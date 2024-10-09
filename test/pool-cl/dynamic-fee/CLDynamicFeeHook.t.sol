@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
+import {GasSnapshot} from "forge-gas-snapshot/GasSnapshot.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {Currency, CurrencyLibrary} from "pancake-v4-core/src/types/Currency.sol";
@@ -35,7 +36,7 @@ import {PriceFeed} from "../../../src/pool-cl/dynamic-fee/PriceFeed.sol";
 import {MockAggregatorV3} from "../../helpers/MockAggregatorV3.sol";
 // import "forge-std/console2.sol";
 
-contract CLDynamicFeeHookTest is Test, PosmTestSetup {
+contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     using Planner for Plan;
     using CurrencyLibrary for Currency;
 
@@ -215,7 +216,10 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
             DEFAULT_FEE,
             0
         );
+
+        snapStart("CLDynamicFeeHook#swap_no_dynamic_fee_and_no_simulation_swap");
         v4Router.executeActions(data);
+        snapEnd();
         (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
         // charge tokenIn fee
         assertGt(feeGrowthGlobal0x128, 0);
@@ -284,7 +288,11 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup {
             dynamic_fee,
             0
         );
+
+        snapStart("CLDynamicFeeHook#swap_with_dynamic_fee");
         v4Router.executeActions(data);
+        snapEnd();
+
         (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
         // charge tokenIn fee
         assertGt(feeGrowthGlobal0x128, 0);
