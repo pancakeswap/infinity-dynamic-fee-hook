@@ -181,8 +181,10 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         }
 
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
-        // Fix TODO : Can not use priceX96
-        // when tick is -887272, sqrtPrice is 4295128739 , priceX96 is 4295128739 * 4295128739 / 2^96 = 0
+        // Fix TODO : should we skip cases when tick is smaller than -665454?  this situation will hardly occur in a normal pool。
+        // when tick is -665454, sqrtPrice is 281482911877014 , priceX96 is 281482911877014 * 281482911877014 / 2^96 = 1
+        // priceX96 will not be available when tick is smaller than -665454
+        // pool_price = token1/token0 = 1/2 ** 96, which is very small
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
 
         // when zeroForOne is true, priceX96After is smaller than priceX96Before, so we can skip the calculation when priceX96Oracle is bigger than priceX96Before
