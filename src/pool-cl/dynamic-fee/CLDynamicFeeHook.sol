@@ -191,8 +191,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // priceX96After - priceX96Before / priceX96Oracle - priceX96Before is negative in this case
         // so SF is 0, we can skip simualtion, will save some gas
         if (
-            params.zeroForOne && priceX96Oracle > priceX96Before
-                || !params.zeroForOne && priceX96Oracle < priceX96Before
+            params.zeroForOne && priceX96Oracle >= priceX96Before
+                || !params.zeroForOne && priceX96Oracle <= priceX96Before
         ) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
@@ -272,7 +272,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             return 0;
         }
 
-        // IndexPremium(IP) = ABS (priceX96Oracle/priceX96Before - -1)
+        // IndexPremium(IP) = ABS (priceX96Oracle/priceX96Before -1)
         // ipX96 = IP * 2 ** 96
         uint256 ipX96;
         {
