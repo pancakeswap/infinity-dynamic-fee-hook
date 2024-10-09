@@ -59,6 +59,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     error DFFTooLarge();
     error SwapAndRevert(uint160 sqrtPriceX96);
     error NotDynamicFeeHook();
+    error PriceFeedNotAvailable();
 
     // ============================== Modifiers ================================
 
@@ -133,21 +134,24 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             revert PriceFeedTokensNotMatch();
         }
 
-        if (initializeHookData.DFF_max > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
+        uint160 priceX96Oracle = priceFeed.getPriceX96();
+        if (priceX96Oracle == 0) {
+            revert PriceFeedNotAvailable();
+        }
+
+        uint24 DFF_max = initializeHookData.DFF_max;
+        if (DFF_max > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
             revert DFFMaxTooLarge();
         }
 
-        if (initializeHookData.baseLpFee > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
+        uint24 baseLpFee = initializeHookData.baseLpFee;
+        if (baseLpFee > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
             revert BaseLpFeeTooLarge();
         }
 
-        poolConfigs[key.toId()] = PoolConfig({
-            priceFeed: priceFeed,
-            DFF_max: initializeHookData.DFF_max,
-            baseLpFee: initializeHookData.baseLpFee
-        });
+        poolConfigs[key.toId()] = PoolConfig({priceFeed: priceFeed, DFF_max: DFF_max, baseLpFee: baseLpFee});
 
-        poolManager.updateDynamicLPFee(key, initializeHookData.baseLpFee);
+        poolManager.updateDynamicLPFee(key, baseLpFee);
 
         return this.afterInitialize.selector;
     }
