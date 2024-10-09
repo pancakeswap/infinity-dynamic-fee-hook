@@ -193,10 +193,10 @@ contract CLDynamicFeeSimulateSwapNotWork is Test, PosmTestSetup {
 
         v4Router.executeActions(data);
         v4Router.executeActions(data2);
-        // 78445666986078207473990891197 [7.844e28], -199, 0, 2500
+        // 78445666986078207473990891197 [7.844e28], -199, 0, 0
         (uint160 sqrtPriceX96_pool0, int24 tick_pool0, uint24 protocolFee_pool0, uint24 lpFee_pool0) =
             poolManager.getSlot0(poolId);
-        //  78638374703984454187140397356 [7.863e28], -150, 0, 250000 [2.5e5]
+        //  78638374703984454187140397356 [7.863e28], -150, 0, 0
         (uint160 sqrtPriceX96_pool1, int24 tick_pool1, uint24 protocolFee_pool1, uint24 lpFee_pool1) =
             poolManager.getSlot0(poolId2);
         // we will get different sqrtPriceX96 after swap with different fee
