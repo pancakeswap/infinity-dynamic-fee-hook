@@ -231,6 +231,19 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         );
     }
 
+    /// @dev Revert a custom error on purpose to achieve simulation of `swap`
+    function simulateSwap(PoolKey calldata key, ICLPoolManager.SwapParams calldata params, bytes calldata hookData)
+        external
+    {
+        // Only this contract can call this function
+        if (msg.sender != address(this)) {
+            revert NotDynamicFeeHook();
+        }
+        poolManager.swap(key, params, hookData);
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+        revert SwapAndRevert(sqrtPriceX96);
+    }
+
     // ========================= Internal Functions ============================
 
     function _calculateDynamicFee(
@@ -342,18 +355,5 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             sqrtPriceX96 = abi.decode(data, (uint160));
         }
         SimulationFlag.setSimulationFlag(false);
-    }
-
-    /// @dev Revert a custom error on purpose to achieve simulation of `swap`
-    function simulateSwap(PoolKey calldata key, ICLPoolManager.SwapParams calldata params, bytes calldata hookData)
-        external
-    {
-        // Only this contract can call this function
-        if (msg.sender != address(this)) {
-            revert NotDynamicFeeHook();
-        }
-        poolManager.swap(key, params, hookData);
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
-        revert SwapAndRevert(sqrtPriceX96);
     }
 }
