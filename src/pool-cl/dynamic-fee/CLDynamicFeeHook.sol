@@ -16,7 +16,7 @@ import {
     SD59x18, uUNIT, UNIT, convert, inv, exp, lt, gt, uEXP_MIN_THRESHOLD, EXP_MAX_INPUT
 } from "prb-math/SD59x18.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
-
+import {SimulationFlag} from "./libraries/SimulationFlag.sol";
 import {IPriceFeed} from "./interfaces/IPriceFeed.sol";
 
 contract CLDynamicFeeHook is CLBaseHook, Ownable {
@@ -165,7 +165,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        if (_isSim) {
+        // Will skip the dynamic fee calculation if the simulation flag is true
+        if (SimulationFlag.getSimulationFlag()) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
@@ -300,7 +301,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         internal
         returns (uint160 sqrtPriceX96)
     {
-        _isSim = true;
+        SimulationFlag.setSimulationFlag(true);
         try this.simulateSwap(key, params, hookData) {
             revert();
         } catch (bytes memory reason) {
@@ -318,7 +319,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             }
             sqrtPriceX96 = abi.decode(data, (uint160));
         }
-        _isSim = false;
+        SimulationFlag.setSimulationFlag(false);
     }
 
     /// @dev Revert a custom error on purpose to achieve simulation of `swap`
