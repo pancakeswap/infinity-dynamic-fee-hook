@@ -242,7 +242,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
         uint160 sqrtPriceX96BySimulation = 58679377533000008502924125879;
-        uint160 sqrtPriceX96AfterSwap = 78078456038875822504588633881;
+        uint160 sqrtPriceX96AfterSwap = 78078457231530057496902067394;
         uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96BySimulation);
         assertGt(dynamic_fee, 0);
         /*
@@ -258,9 +258,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         F = 0.0025
         DFF = DFF_MAX * (1 - e^ -(PIF - F) / F) = 0.25
         dynamic_fee = DFF * Min(PIF, 0.2) = 0.25 * 0.2 = 0.05
-        dynamic_fee = 0.049999 // calculation precision loss
         */
-        assertEq(dynamic_fee, 49999);
+        assertEq(dynamic_fee, 50000);
 
         vm.expectEmit(true, true, true, true);
         // Simulation swap event
@@ -281,7 +280,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             poolId,
             address(v4Router),
             -155 ether,
-            145113358546150870959,
+            145113208012022961886,
             sqrtPriceX96AfterSwap,
             10000000000000000000000,
             -293,
@@ -301,7 +300,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         // dynamic_fee_amount = tokenInAmount * dynamic_fee / 1_000_000 - 1;
         // -1 is for calculation precision loss
         uint256 dynamic_fee_curreny0_amount = swap_amount * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - 1;
-        assertEq(dynamic_fee_curreny0_amount, 7749844999999999999);
+        assertEq(dynamic_fee_curreny0_amount, 7749999999999999999);
         uint256 currency0_balance_before = currency0.balanceOfSelf();
         // collect fees
         bytes memory collect_calldata = CLLiquidityOperations.getCollectEncoded(1, ZERO_BYTES);

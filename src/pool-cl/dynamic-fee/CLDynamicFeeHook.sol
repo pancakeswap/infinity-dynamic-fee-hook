@@ -185,8 +185,12 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // when tick is -665454, sqrtPrice is 281482911877014 , priceX96 is 281482911877014 * 281482911877014 / 2^96 = 1
         // priceX96 will not be available when tick is smaller than -665454
         // pool_price = token1/token0 = 1/2 ** 96, which is very small
+        // oracle max decimals is 18, so min price is 1/10^18
+        // when tick is -414486, pool price is 1/10^18, so we can use priceX96.
+        // oracle will not work when tick is smaller than -414486
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
 
+        // Only charge dynamic fee when price_after_swap and price_oracle are on the same side compared to price_before_swap
         // when zeroForOne is true, priceX96After is smaller than priceX96Before, so we can skip the calculation when priceX96Oracle is bigger than priceX96Before
         // when zeroForOne is false, priceX96After is larger than priceX96Before, so we can skip the calculation when priceX96Oracle is smaller than priceX96Before
         // SF = max{priceX96After - priceX96Before / priceX96Oracle - priceX96Before , 0}
@@ -201,10 +205,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // get the sqrt price after the swap by simulating the swap
         // NOTICE: The swap simulation uses the base LP fee, so the simulated price may differ from the actual swap price, which uses a dynamic fee.
         uint160 sqrtPriceX96After = _simulateSwap(key, params, hookData);
-        uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96After, sqrtPriceX96After, FixedPoint96.Q96));
-        uint24 lpFee = _calculateDynamicFee(
-            priceX96Oracle, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
-        );
+        uint24 lpFee =
+            _calculateDynamicFee(sqrtPriceX96Before, sqrtPriceX96After, poolConfig.baseLpFee, poolConfig.DFF_max);
         if (lpFee == 0) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
@@ -228,10 +230,13 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
         uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
         uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
-
-        return _calculateDynamicFee(
-            priceX96Oracle, priceX96Before, priceX96After, poolConfig.baseLpFee, poolConfig.DFF_max
-        );
+        if (
+            !(priceX96After > priceX96Before && priceX96Oracle > priceX96Before)
+                && !(priceX96After < priceX96Before && priceX96Oracle < priceX96Before)
+        ) {
+            return 0;
+        }
+        return _calculateDynamicFee(sqrtPriceX96Before, sqrtPriceX96AfterSwap, poolConfig.baseLpFee, poolConfig.DFF_max);
     }
 
     /// @dev Revert a custom error on purpose to achieve simulation of `swap`
@@ -250,57 +255,75 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     // ========================= Internal Functions ============================
 
     function _calculateDynamicFee(
-        uint160 priceX96Oracle,
-        uint160 priceX96Before,
-        uint160 priceX96After,
+        uint160 sqrtPriceX96Before,
+        uint160 sqrtPriceX96After,
         uint24 baseLpFee,
         uint24 DFF_max
     ) internal pure returns (uint24) {
-        // ScaledFactor(SF) = max{priceX96After - priceX96Before / priceX96Oracle - priceX96Before , 0}
-        // sfX96 = SF * 2 ** 96
-        uint256 sfX96;
-        {
-            if (priceX96After > priceX96Before && priceX96Oracle > priceX96Before) {
-                sfX96 =
-                    FullMath.mulDiv(priceX96After - priceX96Before, FixedPoint96.Q96, priceX96Oracle - priceX96Before);
+        /**
+         * Dynamic Fee Formula:
+         *         PriceImpactFactor(PIF) = ABS( (price_after - price_before) / price_before )
+         *         will use real PIF number to calculate DFF
+         *         DFF = max{DFF_max * (1 - e ^ -(PIF - baseLpFee) / baseLpFee ), 0}
+         *         Dynamic_fee = DFF * min(PIF, 0.2)
+         */
+        uint256 PIF_max = LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / 5;
+
+        uint24 DFF_uint24;
+        /**
+         * PriceImpactFactor(PIF) = SF * IP = ABS( (price_after - price_before) / price_before )
+         *         PIF = (price_after - price_before) / price_before
+         *         PIF = (sqrtPriceX96After^2 / Q96^2 - sqrtPriceX96Before^2 / Q96^2) / sqrtPriceX96Before^2 / Q96^2
+         *         PIF = (sqrtPriceX96After^2 - sqrtPriceX96Before^2) / sqrtPriceX96Before^2
+         *         PIF = (sqrtPriceX96After + sqrtPriceX96Before) * (sqrtPriceX96After - sqrtPriceX96Before) / sqrtPriceX96Before^2
+         *         PIF_fee_decimals = (sqrtPriceX96After + sqrtPriceX96Before) * (sqrtPriceX96After - sqrtPriceX96Before) * ONE_HUNDRED_PERCENT_FEE / sqrtPriceX96Before^2
+         *         PIF_fee_decimals = (sqrtPriceX96After + sqrtPriceX96Before) * ONE_HUNDRED_PERCENT_FEE / sqrtPriceX96Before *
+         *                             (sqrtPriceX96After - sqrtPriceX96Before) / sqrtPriceX96Before
+         */
+        uint256 PIF;
+        /**
+         * When PIF is greater than 144, exponent( (PIF - baseLpFee) / baseLpFee ) will be bigger than 143 , because baseLpFee is smaller than 1
+         *         1- 1/e^143 is almost equal to 1, so DFF will be almost equal to DFF_max
+         *         PIF = (sqrtPriceX96After / sqrtPriceX96Before)^ 2 - 1
+         *         when sqrtPriceX96After / sqrtPriceX96Before > 12 , we will set DFF as DFF_max
+         *
+         *         Why check this ? because PIF_fee_decimals will be overlflow in some extreme cases when sqrtPriceX96After > sqrtPriceX96Before
+         */
+        if (sqrtPriceX96After / sqrtPriceX96Before >= 12) {
+            DFF_uint24 = DFF_max;
+            PIF = PIF_max;
+        } else {
+            // TODO: Need to check whether wil have some cases which will be overflow
+            PIF = FullMath.mulDiv(
+                sqrtPriceX96After + sqrtPriceX96Before, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE, sqrtPriceX96Before
+            );
+            uint256 sqrtPriceX96Diff;
+            if (sqrtPriceX96After > sqrtPriceX96Before) {
+                sqrtPriceX96Diff = sqrtPriceX96After - sqrtPriceX96Before;
+            } else {
+                sqrtPriceX96Diff = sqrtPriceX96Before - sqrtPriceX96After;
             }
-            if (priceX96After < priceX96Before && priceX96Oracle < priceX96Before) {
-                sfX96 =
-                    FullMath.mulDiv(priceX96Before - priceX96After, FixedPoint96.Q96, priceX96Before - priceX96Oracle);
+            PIF = FullMath.mulDiv(PIF, sqrtPriceX96Diff, sqrtPriceX96Before);
+
+            // DFF = max{DFF_max * (1 - e ^ -(PIF - baseLpFee) / baseLpFee ), 0} = max{DFF_max * (1 - 1/ e ^ (PIF - baseLpFee) / baseLpFee ), 0}
+            // So only PIF is greater than baseLpFee, we will charge the dynamic fee
+            if (PIF <= baseLpFee) {
+                return 0;
             }
         }
 
-        if (sfX96 == 0) {
-            return 0;
-        }
+        if (DFF_uint24 == 0) {
+            SD59x18 DFF;
+            // convert(int256 x) : Converts a simple integer to SD59x18 by multiplying it by `UNIT(1e18)`.
+            // SD59x18 x =  SD59x18.wrap(x_int256 * uUNIT)
+            SD59x18 DFF_MAX = convert(int256(int24(DFF_max)));
 
-        // IndexPremium(IP) = ABS (priceX96Oracle/priceX96Before -1)
-        // ipX96 = IP * 2 ** 96
-        uint256 ipX96;
-        {
-            uint256 r = FullMath.mulDiv(priceX96Oracle, FixedPoint96.Q96, priceX96Before);
-            ipX96 = r > FixedPoint96.Q96 ? r - FixedPoint96.Q96 : FixedPoint96.Q96 - r;
-        }
-
-        // PriceImpactFactor(PIF) = SF * IP
-        // pifX96 = PIF * 2 ** 96
-        uint256 pifX96 = FullMath.mulDiv(sfX96, ipX96, FixedPoint96.Q96);
-
-        // DFF = max{DFF_max * (1 - e ^ -(pifX96 - fX96) / fx96), 0} = max{DFF_max * (1 - 1/ e ^ (pifX96 - fX96) / fx96), 0}
-        SD59x18 DFF;
-        // convert(int256 x) : Converts a simple integer to SD59x18 by multiplying it by `UNIT(1e18)`.
-        // SD59x18 x =  SD59x18.wrap(x_int256 * uUNIT)
-        SD59x18 DFF_MAX = convert(int256(int24(DFF_max)));
-        // fx: fixed fee tier
-        // fX96 = fx * 2 ** 96
-        uint256 fX96 = FullMath.mulDiv(baseLpFee, FixedPoint96.Q96, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
-        if (pifX96 > fX96) {
             // inv(SD59x18 x) : 1/x, Calculates the inverse of x.
             // exp(SD59x18 x) : e^x, Calculates the natural exponent of x.
-            // exponent_uint256 = (pifX96 - fX96) / fx96
-            // exponent_SD59x18_int256 =  int256( (pifX96 - fX96) * uUNIT / fx96 )
+            // exponent_uint256 = (PIF - baseLpFee) / baseLpFee
+            // exponent_SD59x18_int256 =  int256( (PIF - baseLpFee) * uUNIT / baseLpFee )
             // exponent = SD59x18.wrap(exponent_SD59x18_int256)
-            SD59x18 exponent = SD59x18.wrap(int256(FullMath.mulDiv(pifX96 - fX96, uint256(uUNIT), fX96)));
+            SD59x18 exponent = SD59x18.wrap(int256(FullMath.mulDiv(PIF - baseLpFee, uint256(uUNIT), baseLpFee)));
             // when exponent > EXP_MAX_INPUT, inter(1/e^exponent) will be almost equal to 0, so DFF will be be almost equal to DFF_MAX
             if (gt(exponent, EXP_MAX_INPUT)) {
                 DFF = DFF_MAX;
@@ -310,28 +333,25 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
                     DFF = DFF_MAX * (UNIT - inter);
                 }
             }
+
+            if (DFF.isZero()) {
+                return 0;
+            }
+
+            // Will return DFF_MAX if DFF > DFF_MAX
+            if (DFF > DFF_MAX) {
+                DFF = DFF_MAX;
+            }
+
+            // convert(SD59x18 x) : Converts an SD59x18 number to a simple integer by dividing it by `UNIT(1e18)`.
+            DFF_uint24 = uint24(int24(convert(DFF)));
         }
 
-        if (DFF.isZero()) {
-            return 0;
+        if (PIF > PIF_max) {
+            PIF = PIF_max;
         }
-
-        // Will return DFF_MAX if DFF > DFF_MAX
-        if (DFF > DFF_MAX) {
-            DFF = DFF_MAX;
-        }
-
-        // convert(SD59x18 x) : Converts an SD59x18 number to a simple integer by dividing it by `UNIT(1e18)`.
-        uint24 DFF_uint24 = uint24(int24(convert(DFF)));
-        // LPFee = DFF_uint24 * PIF = DFF_uint24 * Min(pifX96, 0.2 * 2 ** 96) / 2 ** 96
-        uint256 pifX96_max = 2 * FixedPoint96.Q96 / 10;
-        if (pifX96 > pifX96_max) {
-            pifX96 = pifX96_max;
-        }
-        uint24 lpFee = uint24(FullMath.mulDiv(DFF_uint24, pifX96, FixedPoint96.Q96));
-        // TODO : Need to add one more parameter about max dynamic fee
-        // DF_max : dynamic fee max
-        // if (lpFee > DF_max) {lpFee = DF_max;}
+        // LPFee = DFF_uint24 * Min(PIF, 0.2 * ONE_HUNDRED_PERCENT_FEE) / ONE_HUNDRED_PERCENT_FEE
+        uint24 lpFee = uint24(FullMath.mulDiv(DFF_uint24, PIF, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE));
         if (lpFee < baseLpFee) {
             return 0;
         }
