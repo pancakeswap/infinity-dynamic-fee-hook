@@ -37,15 +37,14 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     }
 
     // ============================== Variables ================================
+    // 0.2 * ONE_HUNDRED_PERCENT_FEE
+    uint256 private constant PIF_MAX = 200_000;
 
     // will be set to true when emergency status
     // hooks will do nothing when this flag is true
     bool public emergencyFlag;
 
     mapping(PoolId id => PoolConfig) public poolConfigs;
-
-    // TODO: Make it transient
-    bool private _isSim;
 
     // ============================== Events ===================================
     event EmergencyFlagSet(bool flag);
@@ -259,7 +258,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         uint160 sqrtPriceX96After,
         uint24 baseLpFee,
         uint24 DFF_max
-    ) internal pure returns (uint24) {
+    ) internal view returns (uint24) {
         /**
          * Dynamic Fee Formula:
          *         PriceImpactFactor(PIF) = ABS( (price_after - price_before) / price_before )
@@ -267,8 +266,6 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
          *         DFF = max{DFF_max * (1 - e ^ -(PIF - baseLpFee) / baseLpFee ), 0}
          *         Dynamic_fee = DFF * min(PIF, 0.2)
          */
-        uint256 PIF_max = LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / 5;
-
         uint24 DFF_uint24;
         /**
          * PriceImpactFactor(PIF) = SF * IP = ABS( (price_after - price_before) / price_before )
@@ -301,7 +298,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
          */
         if (sqrtPriceX96After / sqrtPriceX96Before >= 12) {
             DFF_uint24 = DFF_max;
-            PIF = PIF_max;
+            PIF = PIF_MAX;
         } else {
             // TODO: Need to check whether wil have some cases which will be overflow
             PIF = FullMath.mulDiv(
@@ -357,8 +354,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             DFF_uint24 = uint24(int24(convert(DFF)));
         }
 
-        if (PIF > PIF_max) {
-            PIF = PIF_max;
+        if (PIF > PIF_MAX) {
+            PIF = PIF_MAX;
         }
         // LPFee = DFF_uint24 * Min(PIF, 0.2 * ONE_HUNDRED_PERCENT_FEE) / ONE_HUNDRED_PERCENT_FEE
         uint24 lpFee = uint24(FullMath.mulDiv(DFF_uint24, PIF, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE));
