@@ -16,7 +16,7 @@ import {IBinPoolManager} from "pancake-v4-core/src/pool-bin/interfaces/IBinPoolM
 import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
 import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
 import {CLPoolManagerRouter} from "pancake-v4-core/test/pool-cl/helpers/CLPoolManagerRouter.sol";
-import {CLPool} from "pancake-v4-core/src/pool-cl/libraries/CLPool.sol";
+import {Hooks} from "pancake-v4-core/src/libraries/Hooks.sol";
 import {IBinPoolManager} from "pancake-v4-core/src/pool-bin/interfaces/IBinPoolManager.sol";
 import {TokenFixture} from "pancake-v4-periphery/test/helpers/TokenFixture.sol";
 import {MockV4Router} from "pancake-v4-periphery/test/mocks/MockV4Router.sol";
@@ -31,9 +31,9 @@ import {CLPoolParametersHelper} from "pancake-v4-core/src/pool-cl/libraries/CLPo
 import {PosmTestSetup} from "pancake-v4-periphery/test/pool-cl/shared/PosmTestSetup.sol";
 import {CLLiquidityOperations} from "pancake-v4-periphery/test/pool-cl/shared/CLLiquidityOperations.sol";
 import {CLDynamicFeeHook} from "../../../src/pool-cl/dynamic-fee/CLDynamicFeeHook.sol";
-import {IPriceFeed} from "../../../src/pool-cl/dynamic-fee/interfaces/IPriceFeed.sol";
 import {PriceFeed} from "../../../src/pool-cl/dynamic-fee/PriceFeed.sol";
 import {MockAggregatorV3} from "../../helpers/MockAggregatorV3.sol";
+import {IPriceFeed} from "../../../src/pool-cl/dynamic-fee/interfaces/IPriceFeed.sol";
 // import "forge-std/console2.sol";
 
 contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
@@ -43,6 +43,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     MockAggregatorV3 defaultOracle;
     PriceFeed priceFeed;
     CLDynamicFeeHook dynamicFeeHook;
+    CLDynamicFeeHook dynamicFeeHook1;
 
     IVault public vault;
     ICLPoolManager public poolManager;
@@ -85,6 +86,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         priceFeed =
             new PriceFeed(Currency.unwrap(currency0), Currency.unwrap(currency1), address(defaultOracle), 0, 3600 * 24);
         dynamicFeeHook = new CLDynamicFeeHook(ICLPoolManager(address(poolManager)));
+
+        dynamicFeeHook1 = new CLDynamicFeeHook(ICLPoolManager(address(poolManager)));
 
         deployAndApprovePosm(vault, poolManager);
 
@@ -148,30 +151,14 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         key1 = PoolKey({
             currency0: currency0,
             currency1: currency1,
-            hooks: IHooks(address(0)),
+            hooks: dynamicFeeHook1,
             poolManager: poolManager,
-            fee: DEFAULT_FEE,
-            parameters: CLPoolParametersHelper.setTickSpacing(bytes32(0), 10)
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            parameters: CLPoolParametersHelper.setTickSpacing(
+                bytes32(uint256(dynamicFeeHook.getHooksRegistrationBitmap())), 10
+            )
         });
         poolId1 = key1.toId();
-        poolManager.initialize(key1, SQRT_RATIO_1_1, ZERO_BYTES);
-
-        // mint position
-        planner = Planner.init().add(
-            Actions.CL_MINT_POSITION,
-            abi.encode(
-                key1,
-                -300,
-                300,
-                10_000 ether,
-                MAX_SLIPPAGE_INCREASE,
-                MAX_SLIPPAGE_INCREASE,
-                ActionConstants.MSG_SENDER,
-                ZERO_BYTES
-            )
-        );
-        bytes memory pool1_callData_0 = planner.finalizeModifyLiquidityWithClose(key1);
-        lpm.modifyLiquidities(pool1_callData_0, block.timestamp + 1);
 
         v4Router = new MockV4Router(vault, poolManager, IBinPoolManager(address(0)));
         IERC20(Currency.unwrap(currency0)).approve(address(v4Router), 10000000 ether);
@@ -190,6 +177,87 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             ICLPoolManager.SwapParams({zeroForOne: true, amountSpecified: 0, sqrtPriceLimitX96: 0});
         vm.expectRevert(CLDynamicFeeHook.NotDynamicFeeHook.selector);
         dynamicFeeHook.simulateSwap(key, params, ZERO_BYTES);
+    }
+
+    // NotDynamicFeePool
+    function test_addPoolConfig_revert_NotDynamicFeePool() public {
+        PoolKey memory key_not_dynamic = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            hooks: dynamicFeeHook1,
+            poolManager: poolManager,
+            fee: DEFAULT_FEE,
+            parameters: CLPoolParametersHelper.setTickSpacing(
+                bytes32(uint256(dynamicFeeHook.getHooksRegistrationBitmap())), 10
+            )
+        });
+        vm.expectRevert(CLDynamicFeeHook.NotDynamicFeePool.selector);
+        dynamicFeeHook.addPoolConfig(key_not_dynamic, priceFeed, MAX_DFF, DEFAULT_FEE);
+    }
+
+    // PriceFeedTokensNotMatch
+    function test_addPoolConfig_revert_PriceFeedTokensNotMatch() public {
+        MockERC20 token2 = new MockERC20("T", "T", 18);
+        PriceFeed priceFeed2 =
+            new PriceFeed(address(token2), Currency.unwrap(currency0), address(defaultOracle), 0, 3600 * 24);
+        vm.expectRevert(CLDynamicFeeHook.PriceFeedTokensNotMatch.selector);
+        dynamicFeeHook.addPoolConfig(key1, priceFeed2, MAX_DFF, DEFAULT_FEE);
+    }
+
+    // DFFMaxTooLarge
+    function test_addPoolConfig_revert_DFFMaxTooLarge() public {
+        vm.expectRevert(CLDynamicFeeHook.DFFMaxTooLarge.selector);
+        dynamicFeeHook.addPoolConfig(key1, priceFeed, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE, DEFAULT_FEE);
+    }
+
+    // BaseLpFeeTooLarge
+    function test_addPoolConfig_revert_BaseLpFeeTooLarge() public {
+        vm.expectRevert(CLDynamicFeeHook.BaseLpFeeTooLarge.selector);
+        dynamicFeeHook.addPoolConfig(key1, priceFeed, MAX_DFF, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
+    }
+
+    // BaseLpFeeTooLarge
+    function test_addPoolConfig_revert_BaseLpFeeTooLarge_than_DFF() public {
+        vm.expectRevert(CLDynamicFeeHook.BaseLpFeeTooLarge.selector);
+        dynamicFeeHook.addPoolConfig(key1, priceFeed, MAX_DFF, MAX_DFF / 5 + 1);
+    }
+
+    // addPoolConfig success
+    function test_addPoolConfig_success() public {
+        vm.expectEmit(true, true, true, true);
+        emit CLDynamicFeeHook.UpdatePoolConfig(poolId1, priceFeed, MAX_DFF, DEFAULT_FEE);
+        dynamicFeeHook.addPoolConfig(key1, priceFeed, MAX_DFF, DEFAULT_FEE);
+        (IPriceFeed priceFeedContract, uint24 hook_DFF_max, uint24 baseLpFee) = dynamicFeeHook.poolConfigs(poolId1);
+        assertEq(address(priceFeedContract), address(priceFeed));
+        assertEq(hook_DFF_max, MAX_DFF);
+        assertEq(baseLpFee, DEFAULT_FEE);
+    }
+
+    // InvalidPoolConfig when pool initialized
+    function test_afterInitialize_revert_InvalidPoolConfig() public {
+        // vm.expectRevert(CLDynamicFeeHook.InvalidPoolConfig.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Hooks.Wrap__FailedHookCall.selector,
+                address(dynamicFeeHook1),
+                abi.encodeWithSelector(CLDynamicFeeHook.InvalidPoolConfig.selector)
+            )
+        );
+        poolManager.initialize(key1, SQRT_RATIO_1_1, ZERO_BYTES);
+    }
+
+    // PriceFeedNotAvailable
+    function test_afterInitialize_revert_PriceFeedNotAvailable() public {
+        dynamicFeeHook1.addPoolConfig(key1, priceFeed, MAX_DFF, DEFAULT_FEE);
+        defaultOracle.updateAnswer(0);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Hooks.Wrap__FailedHookCall.selector,
+                address(dynamicFeeHook1),
+                abi.encodeWithSelector(CLDynamicFeeHook.PriceFeedNotAvailable.selector)
+            )
+        );
+        poolManager.initialize(key1, SQRT_RATIO_1_1, ZERO_BYTES);
     }
 
     function test_swap_no_dynamic_fee() external {

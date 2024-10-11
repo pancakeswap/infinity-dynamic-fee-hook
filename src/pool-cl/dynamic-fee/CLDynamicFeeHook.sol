@@ -48,6 +48,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
 
     // ============================== Events ===================================
     event EmergencyFlagSet(bool flag);
+    event UpdatePoolConfig(PoolId indexed id, IPriceFeed priceFeed, uint24 DFF_max, uint24 baseLpFee);
 
     // ============================== Errors ===================================
 
@@ -104,11 +105,11 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             revert PoolAlreadyInitialized();
         }
 
-        if (DFF_max > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
+        if (DFF_max >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
             revert DFFMaxTooLarge();
         }
 
-        if (baseLpFee > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
+        if (baseLpFee >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
             revert BaseLpFeeTooLarge();
         }
 
@@ -119,6 +120,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         }
 
         poolConfigs[id] = PoolConfig({priceFeed: priceFeed, DFF_max: DFF_max, baseLpFee: baseLpFee});
+        emit UpdatePoolConfig(id, priceFeed, DFF_max, baseLpFee);
     }
 
     function getHooksRegistrationBitmap() external pure override returns (uint16) {
