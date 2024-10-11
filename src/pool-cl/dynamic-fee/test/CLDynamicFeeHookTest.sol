@@ -37,12 +37,11 @@ contract CLDynamicFeeHookTest is CLBaseHook {
         );
     }
 
-    function beforeSwap(
-        address,
-        PoolKey calldata key,
-        ICLPoolManager.SwapParams calldata params,
-        bytes calldata hookData
-    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
+    function beforeSwap(address, PoolKey calldata, ICLPoolManager.SwapParams calldata, bytes calldata hookData)
+        external
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
         uint24 lpFee = abi.decode(hookData, (uint24));
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, lpFee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }

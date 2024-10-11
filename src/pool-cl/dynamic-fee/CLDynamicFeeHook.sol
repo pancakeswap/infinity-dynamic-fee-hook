@@ -171,19 +171,15 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         return this.afterInitialize.selector;
     }
 
+    /// @dev Do not need to check whether it is simulation swap.
+    /// @dev msg.sender will be this contract address when it is simulation swap, pool will not call hook beforeSwap in swap function
     function beforeSwap(
-        address sender,
+        address,
         PoolKey calldata key,
         ICLPoolManager.SwapParams calldata params,
         bytes calldata hookData
     ) external override returns (bytes4, BeforeSwapDelta, uint24) {
         if (emergencyFlag) {
-            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-        }
-
-        // Will skip the dynamic fee calculation if it is simulation
-        // When the sender is this contract, it means the swap is a simulation
-        if (sender == address(this)) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
