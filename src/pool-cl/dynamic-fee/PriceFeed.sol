@@ -62,13 +62,16 @@ contract PriceFeed is IPriceFeed, Ownable {
     /// @param oracle_ The new oracle address
     /// @param oracleTokenOrder_ The new oracle token order
     /// @param oracleExpirationThreshold_ The new oracle expiration threshold
-    function updateOracle(address oracle_, uint8 oracleTokenOrder_,uint32 oracleExpirationThreshold_) external onlyOwner {
+    function updateOracle(address oracle_, uint8 oracleTokenOrder_, uint32 oracleExpirationThreshold_)
+        external
+        onlyOwner
+    {
         info.oracle = AggregatorV3Interface(oracle_);
-        info.oracleExpirationThreshold = oracleExpirationThreshold_;
         uint8 oracleDecimalss = info.oracle.decimals();
         if (oracleDecimalss > ORACLE_MAX_DECIMALS) {
             revert InvalidoracleDecimalss();
         }
+        info.oracleExpirationThreshold = oracleExpirationThreshold_;
         info.oracleTokenOrder = oracleTokenOrder_;
         info.oracleDecimals = oracleDecimalss;
         emit PriceFeedUpdated(oracle_, oracleTokenOrder_, oracleExpirationThreshold_);

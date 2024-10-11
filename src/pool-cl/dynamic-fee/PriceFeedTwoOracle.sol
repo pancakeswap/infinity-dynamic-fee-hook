@@ -106,7 +106,14 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
         info.oracle0TargetTokenIndex = oracle0TargetTokenIndex_;
         info.oracle1TargetTokenIndex = oracle1TargetTokenIndex_;
 
-        emit PriceFeedUpdated(oracle0_, oracle1_, oracle0TargetTokenIndex_, oracle1TargetTokenIndex_, oracle0ExpirationThreshold_, oracle1ExpirationThreshold_);
+        emit PriceFeedUpdated(
+            oracle0_,
+            oracle1_,
+            oracle0TargetTokenIndex_,
+            oracle1TargetTokenIndex_,
+            oracle0ExpirationThreshold_,
+            oracle1ExpirationThreshold_
+        );
     }
 
     /// @dev Get the latest price
