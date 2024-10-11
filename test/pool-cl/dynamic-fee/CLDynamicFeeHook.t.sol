@@ -108,8 +108,9 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             )
         });
         poolId = key.toId();
-        bytes memory initializeHookData = dynamicFeeHook.generateInitializeHookData(priceFeed, MAX_DFF, DEFAULT_FEE);
-        poolManager.initialize(key, SQRT_RATIO_1_1, initializeHookData);
+        // add pool config in hook
+        dynamicFeeHook.addPoolConfig(key, priceFeed, MAX_DFF, DEFAULT_FEE);
+        poolManager.initialize(key, SQRT_RATIO_1_1, ZERO_BYTES);
 
         // mint position
         planner = Planner.init().add(

@@ -59,6 +59,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     error SwapAndRevert(uint160 sqrtPriceX96);
     error NotDynamicFeeHook();
     error PriceFeedNotAvailable();
+    error PoolAlreadyInitialized();
+    error InvalidPoolConfig();
 
     // ============================== Modifiers ================================
 
@@ -73,15 +75,35 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         emit EmergencyFlagSet(flag);
     }
 
-    /// @dev Develpers can call this function to generate the hook data when initializing the pool
+    /// @dev Add new dynamic fee configuration for a pool
+    /// @notice Only owner can call this function
+    /// @notice The pool must be a dynamic fee pool
+    /// @notice The pool must not be initialized
+    /// @param key The pool key
     /// @param priceFeed The price feed contract
     /// @param DFF_max The maximum dynamic fee
     /// @param baseLpFee The base LP fee
-    function generateInitializeHookData(IPriceFeed priceFeed, uint24 DFF_max, uint24 baseLpFee)
+    function addPoolConfig(PoolKey calldata key, IPriceFeed priceFeed, uint24 DFF_max, uint24 baseLpFee)
         external
-        pure
-        returns (bytes memory)
+        onlyOwner
     {
+        if (!key.fee.isDynamicLPFee()) {
+            revert NotDynamicFeePool();
+        }
+
+        if (
+            address(priceFeed.token0()) != Currency.unwrap(key.currency0)
+                || address(priceFeed.token1()) != Currency.unwrap(key.currency1)
+        ) {
+            revert PriceFeedTokensNotMatch();
+        }
+
+        PoolId id = key.toId();
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
+        if (sqrtPriceX96 != 0) {
+            revert PoolAlreadyInitialized();
+        }
+
         if (DFF_max > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
             revert DFFMaxTooLarge();
         }
@@ -89,7 +111,14 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         if (baseLpFee > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
             revert BaseLpFeeTooLarge();
         }
-        return abi.encode(PoolConfig({priceFeed: priceFeed, DFF_max: DFF_max, baseLpFee: baseLpFee}));
+
+        // baseLpFee should be smaller than max dynamic fee
+        uint256 maxDynamicFee = DFF_max * PIF_MAX / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+        if (maxDynamicFee < baseLpFee) {
+            revert BaseLpFeeTooLarge();
+        }
+
+        poolConfigs[id] = PoolConfig({priceFeed: priceFeed, DFF_max: DFF_max, baseLpFee: baseLpFee});
     }
 
     function getHooksRegistrationBitmap() external pure override returns (uint16) {
@@ -113,7 +142,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         );
     }
 
-    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata hookData)
+    /// @dev Initialize the dynamic fee pool
+    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata)
         external
         override
         poolManagerOnly
@@ -123,34 +153,18 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             revert NotDynamicFeePool();
         }
 
-        PoolConfig memory initializeHookData = abi.decode(hookData, (PoolConfig));
-
-        IPriceFeed priceFeed = IPriceFeed(initializeHookData.priceFeed);
-        if (
-            address(priceFeed.token0()) != Currency.unwrap(key.currency0)
-                || address(priceFeed.token1()) != Currency.unwrap(key.currency1)
-        ) {
-            revert PriceFeedTokensNotMatch();
+        PoolId id = key.toId();
+        PoolConfig memory poolConfig = poolConfigs[id];
+        if (poolConfig.DFF_max == 0 || poolConfig.baseLpFee == 0 || address(poolConfig.priceFeed) == address(0)) {
+            revert InvalidPoolConfig();
         }
 
-        uint160 priceX96Oracle = priceFeed.getPriceX96();
+        uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
         if (priceX96Oracle == 0) {
             revert PriceFeedNotAvailable();
         }
 
-        uint24 DFF_max = initializeHookData.DFF_max;
-        if (DFF_max > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
-            revert DFFMaxTooLarge();
-        }
-
-        uint24 baseLpFee = initializeHookData.baseLpFee;
-        if (baseLpFee > LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
-            revert BaseLpFeeTooLarge();
-        }
-
-        poolConfigs[key.toId()] = PoolConfig({priceFeed: priceFeed, DFF_max: DFF_max, baseLpFee: baseLpFee});
-
-        poolManager.updateDynamicLPFee(key, baseLpFee);
+        poolManager.updateDynamicLPFee(key, poolConfig.baseLpFee);
 
         return this.afterInitialize.selector;
     }
@@ -258,7 +272,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         uint160 sqrtPriceX96After,
         uint24 baseLpFee,
         uint24 DFF_max
-    ) internal view returns (uint24) {
+    ) internal pure returns (uint24) {
         /**
          * Dynamic Fee Formula:
          *         PriceImpactFactor(PIF) = ABS( (price_after - price_before) / price_before )
