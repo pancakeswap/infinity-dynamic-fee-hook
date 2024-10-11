@@ -483,5 +483,16 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         v4Router.executeActions(data);
     }
 
+    // setEmergencyFlag
+    function test_setEmergencyFlag() public {
+        bool emergencyFlag = dynamicFeeHook.emergencyFlag();
+        assertEq(emergencyFlag, false);
+        vm.expectEmit(true, true, true, true);
+        emit CLDynamicFeeHook.UpdateEmergencyFlag(true);
+        dynamicFeeHook.setEmergencyFlag(true);
+        emergencyFlag = dynamicFeeHook.emergencyFlag();
+        assertEq(emergencyFlag, true);
+    }
+
     receive() external payable {}
 }

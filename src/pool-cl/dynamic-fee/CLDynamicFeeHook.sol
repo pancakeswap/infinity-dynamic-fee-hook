@@ -47,7 +47,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     mapping(PoolId id => PoolConfig) public poolConfigs;
 
     // ============================== Events ===================================
-    event EmergencyFlagSet(bool flag);
+    event UpdateEmergencyFlag(bool flag);
     event UpdatePoolConfig(PoolId indexed id, IPriceFeed priceFeed, uint24 DFF_max, uint24 baseLpFee);
 
     // ============================== Errors ===================================
@@ -73,7 +73,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     /// @param flag The emergency flag
     function setEmergencyFlag(bool flag) external onlyOwner {
         emergencyFlag = flag;
-        emit EmergencyFlagSet(flag);
+        emit UpdateEmergencyFlag(flag);
     }
 
     /// @dev Add new dynamic fee configuration for a pool
@@ -233,6 +233,9 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     /// @param key The pool key
     /// @param sqrtPriceX96AfterSwap The sqrt price after the swap
     function getDynamicFee(PoolKey calldata key, uint160 sqrtPriceX96AfterSwap) external view returns (uint24) {
+        if (emergencyFlag) {
+            return 0;
+        }
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
