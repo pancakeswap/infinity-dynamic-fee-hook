@@ -280,9 +280,19 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
          *         PIF_fee_decimals = (sqrtPriceX96After + sqrtPriceX96Before) * ONE_HUNDRED_PERCENT_FEE / sqrtPriceX96Before *
          *                             (sqrtPriceX96After - sqrtPriceX96Before) / sqrtPriceX96Before
          */
+
+        /**
+         * PIF = ABS( (price_after - price_before) / price_before )
+         *      PIF = ABS( (price_after/price_before - 1 )
+         *      It means swap direction will affect PIF value.
+         *      1. when zeroForOne is true, priceX96After is smaller than priceX96Before, so PIF is smaller than 1(ONE_HUNDRED_PERCENT_FEE)
+         *      2. when zeroForOne is false, priceX96After is larger than priceX96Before
+         *         2.1 when price_after/price_before < 2 , PIF is smaller than 1(ONE_HUNDRED_PERCENT_FEE)
+         *         2.2 when price_after/price_before > 2 , PIF is bigger than 1(ONE_HUNDRED_PERCENT_FEE)
+         */
         uint256 PIF;
         /**
-         * When PIF is greater than 144, exponent( (PIF - baseLpFee) / baseLpFee ) will be bigger than 143 , because baseLpFee is smaller than 1
+         * When PIF is greater than 144, exponent:( (PIF - baseLpFee) / baseLpFee ) will be bigger than 143 , because baseLpFee is smaller than 1
          *         1- 1/e^143 is almost equal to 1, so DFF will be almost equal to DFF_max
          *         PIF = (sqrtPriceX96After / sqrtPriceX96Before)^ 2 - 1
          *         when sqrtPriceX96After / sqrtPriceX96Before > 12 , we will set DFF as DFF_max
