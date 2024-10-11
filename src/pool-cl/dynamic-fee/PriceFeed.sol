@@ -16,10 +16,14 @@ contract PriceFeed is IPriceFeed, Ownable {
     IERC20Metadata public immutable token0;
     IERC20Metadata public immutable token1;
 
-    uint256 constant ORACLE_MAX_DECIMALS = 18;
-    uint256 constant PRECISION_DECIMALS = 18;
+    uint256 private constant ORACLE_MAX_DECIMALS = 18;
+    uint256 private constant PRECISION_DECIMALS = 18;
     /// @dev Default order of the oracle
-    uint256 constant ORACLE_DEFAULT_ORDER = 0;
+    /// 0 means oracle order is same with v4 pool order
+    /// 1 means oracle order is reverse with v4 pool order
+    uint256 private constant ORACLE_DEFAULT_ORDER = 0;
+
+    event PriceFeedUpdated(address indexed oracle, uint8 oracleTokenOrder, uint32 oracleExpirationThreshold);
 
     error InvalidoracleDecimalss();
 
@@ -28,7 +32,7 @@ contract PriceFeed is IPriceFeed, Ownable {
     /// @param token1_ The second token
     /// @param oracle_ The oracle address
     /// @param oracleExpirationThreshold_ The oracle expiration threshold
-    /// @param oracleTokenOrder_ The oracle token order
+    /// @param oracleTokenOrder_ The oracle token order, 0: oracle order is same with v4 pool order, 1: oracle order is reverse with v4 pool order
     constructor(
         address token0_,
         address token1_,
@@ -56,15 +60,18 @@ contract PriceFeed is IPriceFeed, Ownable {
 
     /// @dev Update the oracle and oracle expiration threshold
     /// @param oracle_ The new oracle address
+    /// @param oracleTokenOrder_ The new oracle token order
     /// @param oracleExpirationThreshold_ The new oracle expiration threshold
-    function updateOracle(address oracle_, uint32 oracleExpirationThreshold_) external onlyOwner {
+    function updateOracle(address oracle_, uint8 oracleTokenOrder_,uint32 oracleExpirationThreshold_) external onlyOwner {
         info.oracle = AggregatorV3Interface(oracle_);
         info.oracleExpirationThreshold = oracleExpirationThreshold_;
         uint8 oracleDecimalss = info.oracle.decimals();
         if (oracleDecimalss > ORACLE_MAX_DECIMALS) {
             revert InvalidoracleDecimalss();
         }
+        info.oracleTokenOrder = oracleTokenOrder_;
         info.oracleDecimals = oracleDecimalss;
+        emit PriceFeedUpdated(oracle_, oracleTokenOrder_, oracleExpirationThreshold_);
     }
 
     /// @dev Get the latest price
@@ -73,7 +80,12 @@ contract PriceFeed is IPriceFeed, Ownable {
         PriceFeedInfo memory priceFeedInfo = info;
         (, int256 answer,, uint256 updatedAt,) = priceFeedInfo.oracle.latestRoundData();
         // can not revert, we must make sure hooks can still work even if the price is not available
-        if (answer <= 0 || block.timestamp > updatedAt + priceFeedInfo.oracleExpirationThreshold) {
+        // valid answer should be between 1 and 10^(oracleDecimals + 18)
+        // if answer is greater than 10^(oracleDecimals + 18), it is considered invalid
+        if (
+            answer <= 0 || answer > int256(10 ** (priceFeedInfo.oracleDecimals + ORACLE_MAX_DECIMALS))
+                || block.timestamp > updatedAt + priceFeedInfo.oracleExpirationThreshold
+        ) {
             return 0;
         }
         uint256 currentPrice = uint256(answer);

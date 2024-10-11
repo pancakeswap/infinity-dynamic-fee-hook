@@ -22,9 +22,18 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
     IERC20Metadata public immutable token0;
     IERC20Metadata public immutable token1;
 
-    uint256 constant ORACLE_MAX_DECIMALS = 18;
+    uint256 private constant ORACLE_MAX_DECIMALS = 18;
     /// @dev Default target token index is 0, if index is not 0 ,need to calculate the reverse price
-    uint256 constant ORACLE_DEFAULT_INDEX = 0;
+    uint256 private constant ORACLE_DEFAULT_INDEX = 0;
+
+    event PriceFeedUpdated(
+        address indexed oracle0,
+        address indexed oracle1,
+        uint8 oracle0TargetTokenIndex,
+        uint8 oracle1TargetTokenIndex,
+        uint32 oracle0ExpirationThreshold,
+        uint32 oracle1ExpirationThreshold
+    );
 
     error InvalidOracleDecimals();
 
@@ -96,6 +105,8 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
         info.oracle1Decimals = oracle1Decimals;
         info.oracle0TargetTokenIndex = oracle0TargetTokenIndex_;
         info.oracle1TargetTokenIndex = oracle1TargetTokenIndex_;
+
+        emit PriceFeedUpdated(oracle0_, oracle1_, oracle0TargetTokenIndex_, oracle1TargetTokenIndex_, oracle0ExpirationThreshold_, oracle1ExpirationThreshold_);
     }
 
     /// @dev Get the latest price
@@ -105,8 +116,11 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
         (, int256 oracle0Answer,, uint256 oracle0UpdatedAt,) = priceFeedInfo.oracle0.latestRoundData();
         (, int256 oracle1Answer,, uint256 oracle1UpdatedAt,) = priceFeedInfo.oracle1.latestRoundData();
         // can not revert, we must make sure hooks can still work even if the price is not available
+        // if answer is greater than 10^(oracleDecimals + 18), it is considered invalid
         if (
             oracle0Answer <= 0 || oracle1Answer <= 0
+                || oracle0Answer > int256(10 ** (priceFeedInfo.oracle0Decimals + ORACLE_MAX_DECIMALS))
+                || oracle1Answer > int256(10 ** (priceFeedInfo.oracle1Decimals + ORACLE_MAX_DECIMALS))
                 || block.timestamp > oracle0UpdatedAt + priceFeedInfo.oracle0ExpirationThreshold
                 || block.timestamp > oracle1UpdatedAt + priceFeedInfo.oracle1ExpirationThreshold
         ) {
