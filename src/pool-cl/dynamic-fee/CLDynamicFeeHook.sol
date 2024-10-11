@@ -16,7 +16,6 @@ import {
     SD59x18, uUNIT, UNIT, convert, inv, exp, lt, gt, uEXP_MIN_THRESHOLD, EXP_MAX_INPUT
 } from "prb-math/SD59x18.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
-import {SimulationFlag} from "./libraries/SimulationFlag.sol";
 import {IPriceFeed} from "./interfaces/IPriceFeed.sol";
 
 contract CLDynamicFeeHook is CLBaseHook, Ownable {
@@ -76,10 +75,11 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         emit UpdateEmergencyFlag(flag);
     }
 
-    /// @dev Add new dynamic fee configuration for a pool
-    /// @notice Only owner can call this function
-    /// @notice The pool must be a dynamic fee pool
-    /// @notice The pool must not be initialized
+    /// @notice Add new dynamic fee configuration for a pool
+    /// @dev Only owner can call this function
+    /// @dev The pool must be a dynamic fee pool
+    /// @dev The pool must not be initialized
+    /// @dev Can update config before the pool is initialized
     /// @param key The pool key
     /// @param priceFeed The price feed contract
     /// @param DFF_max The maximum dynamic fee
@@ -172,7 +172,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     }
 
     function beforeSwap(
-        address,
+        address sender,
         PoolKey calldata key,
         ICLPoolManager.SwapParams calldata params,
         bytes calldata hookData
@@ -181,8 +181,9 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
-        // Will skip the dynamic fee calculation if the simulation flag is true
-        if (SimulationFlag.getSimulationFlag()) {
+        // Will skip the dynamic fee calculation if it is simulation
+        // When the sender is this contract, it means the swap is a simulation
+        if (sender == address(this)) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
@@ -389,12 +390,11 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         internal
         returns (uint160 sqrtPriceX96)
     {
-        SimulationFlag.setSimulationFlag(true);
         try this.simulateSwap(key, params, hookData) {
             revert();
         } catch (bytes memory reason) {
             bytes4 selector;
-            assembly {
+            assembly ("memory-safe") {
                 selector := mload(add(reason, 0x20))
             }
             if (selector != SwapAndRevert.selector) {
@@ -407,7 +407,6 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             }
             sqrtPriceX96 = abi.decode(data, (uint160));
         }
-        SimulationFlag.setSimulationFlag(false);
     }
 
     /// @dev Get the oracle price , and make sure hook can still work even if the oracle is not available
