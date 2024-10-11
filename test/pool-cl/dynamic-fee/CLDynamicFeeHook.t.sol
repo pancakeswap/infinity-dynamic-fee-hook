@@ -313,6 +313,24 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         assertEq(feeGrowthGlobal1x128, 0);
     }
 
+    function testFuzz_swap_with_dynamic_fee(uint128 swap_amount, bool is_zeroForOne, uint256 oracle_price) external {
+        vm.assume(swap_amount > 0);
+        defaultOracle.updateAnswer(int256(oracle_price));
+
+        uint128 liquidity = poolManager.getLiquidity(poolId);
+        assertGt(liquidity, 0);
+
+        ICLRouterBase.CLSwapExactInputSingleParams memory params =
+            ICLRouterBase.CLSwapExactInputSingleParams(key, is_zeroForOne, swap_amount, 0, 0, bytes(""));
+
+        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
+        Currency currencyIn = is_zeroForOne ? key.currency0 : key.currency1;
+        Currency currencyOut = is_zeroForOne ? key.currency1 : key.currency0;
+        bytes memory data = planner.finalizeSwap(currencyIn, currencyOut, ActionConstants.MSG_SENDER);
+
+        v4Router.executeActions(data);
+    }
+
     function test_swap_with_dynamic_fee_zeroForOne() external {
         // set oracle price to 0.8
         defaultOracle.updateAnswer(80 * 10 ** 16);
