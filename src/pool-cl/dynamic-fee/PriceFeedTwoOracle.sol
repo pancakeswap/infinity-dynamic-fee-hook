@@ -25,6 +25,11 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
     /// @dev Default target token index is 0, if index is not 0 ,need to calculate the reverse price
     uint256 private constant ORACLE_DEFAULT_INDEX = 0;
 
+    // Max price is 10^10
+    uint256 private constant MAX_PRICE = 10 ** 28;
+    // Min price is 10^-10
+    uint256 private constant MIN_PRICE = 10 ** 8;
+
     event PriceFeedUpdated(
         address indexed oracle0,
         address indexed oracle1,
@@ -115,7 +120,9 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
         );
     }
 
-    /// @dev Get the latest price
+    /// @notice Get the latest price
+    /// @dev Some edge cases will still have some issues ,now only support oracle price between 10^-10 and 10^10.
+    /// @dev Will try to fix all the edge cases in the future if we decide to use this contract
     /// @return priceX96 The latest price
     function getPriceX96() external view virtual returns (uint160 priceX96) {
         PriceFeedInfo memory priceFeedInfo = info;
@@ -143,6 +150,13 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
             priceFeedInfo.oracle1TargetTokenIndex,
             priceFeedInfo.oracle1Decimals
         );
+
+        // if currentPrice smaller than 10 ^ -16, return 0
+        // if currentPrice larger than 10 ^ 18, return 0
+        // it is considered invalid
+        if (currentPrice > MAX_PRICE || currentPrice < MIN_PRICE) {
+            return 0;
+        }
 
         priceX96 = PriceFeedLib.calculatePriceX96(
             currentPrice,

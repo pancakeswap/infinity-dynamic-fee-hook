@@ -77,14 +77,6 @@ library PriceFeedLib {
         uint256 priceX96_u256 = FullMath.mulDiv(price, FixedPoint96.Q96, 10 ** oracleDecimals);
         priceX96_u256 = FullMath.mulDiv(priceX96_u256, 10 ** token1Decimals, 10 ** token0Decimals);
 
-        // Only need to check the priceX96_u256 when oracleDecimals is 18
-        // if priceX96_u256 smaller than 10 ^ -16, return 0
-        // if priceX96_u256 larger than 10 ^ 18, return 0
-        // it is considered invalid
-        if (oracleDecimals == PRECISION_DECIMALS && (priceX96_u256 > MAX_PRICEX96 || priceX96_u256 < MIN_PRICEX96)) {
-            priceX96_u256 = 0;
-        }
-
         return uint160(priceX96_u256);
     }
 }
