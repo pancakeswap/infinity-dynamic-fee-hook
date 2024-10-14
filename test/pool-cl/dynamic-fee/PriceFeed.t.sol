@@ -7,6 +7,7 @@ import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
 import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.sol";
 import {MockAggregatorV3} from "../../helpers/MockAggregatorV3.sol";
 import {PriceFeed} from "../../../src/pool-cl/dynamic-fee/PriceFeed.sol";
+import {PriceFeedLib} from "../../../src/pool-cl/dynamic-fee/libraries/PriceFeedLib.sol";
 
 contract PriceFeedTest is Test {
     MockAggregatorV3 defaultOracle;
@@ -37,7 +38,9 @@ contract PriceFeedTest is Test {
         vm.assume(oracle_price < 10 ** 36);
         defaultOracle.updateAnswer(int256(oracle_price));
         uint256 priceX96_expected = FullMath.mulDiv(oracle_price, FixedPoint96.Q96, 10 ** ORACLE_DEFAULT_DECIMALS);
-
+        if (priceX96_expected < PriceFeedLib.MIN_PRICEX96 || priceX96_expected > PriceFeedLib.MAX_PRICEX96) {
+            priceX96_expected = 0;
+        }
         uint256 priceX96 = priceFeedContract.getPriceX96();
         assertEq(priceX96, priceX96_expected);
     }
@@ -50,7 +53,9 @@ contract PriceFeedTest is Test {
         // calculate the reverse order price , 1/price
         uint256 real_price = 10 ** (ORACLE_DEFAULT_DECIMALS * 2) / oracle_price;
         uint256 priceX96_expected = FullMath.mulDiv(real_price, FixedPoint96.Q96, 10 ** ORACLE_DEFAULT_DECIMALS);
-
+        if (priceX96_expected < PriceFeedLib.MIN_PRICEX96 || priceX96_expected > PriceFeedLib.MAX_PRICEX96) {
+            priceX96_expected = 0;
+        }
         uint256 priceX96 = priceFeedContractReverseOrder.getPriceX96();
         assertEq(priceX96, priceX96_expected);
     }

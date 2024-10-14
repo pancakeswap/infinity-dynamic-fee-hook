@@ -8,6 +8,10 @@ library PriceFeedLib {
     /// @dev Default target token index is 0, if index is not 0 ,need to calculate the reverse price
     uint256 constant ORACLE_DEFAULT_INDEX = 0;
     uint256 constant PRECISION_DECIMALS = 18;
+    // Max price is 10^18 , FixedPoint96.Q96 * 10 ** 18
+    uint256 constant MAX_PRICEX96 = 79228162514264337593543950336000000000000000000;
+    // Min price is 10 ^ -16, FixedPoint96.Q96 / 10 ** 16
+    uint256 constant MIN_PRICEX96 = 7922816251426;
 
     /// @dev Calculate the reverse order price
     /// For exmaple , oracle default price is BTC/ETH , but we want to calculate the price of ETH/BTC
@@ -70,7 +74,16 @@ library PriceFeedLib {
         // currentPrice = v4_pool_token1_amount / 10 ** token1Decimals  * 10 ** oracleDecimals / (v4_pool_token0_amount / 10 ** token0Decimals)
         // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount = currentPrice * 10 ** token1Decimals / 10 ** token0Decimals / 10 ** oracleDecimals
         // v4_pool_price_x96 = v4_pool_price * 2^96 = currentPrice * 2^96 / 10 ** oracleDecimals * 10 ** token1Decimals / 10 ** token0Decimals
-        priceX96 = uint160(FullMath.mulDiv(price, FixedPoint96.Q96, 10 ** oracleDecimals));
-        priceX96 = uint160(FullMath.mulDiv(priceX96, 10 ** token1Decimals, 10 ** token0Decimals));
+        uint256 priceX96_u256 = FullMath.mulDiv(price, FixedPoint96.Q96, 10 ** oracleDecimals);
+        priceX96_u256 = FullMath.mulDiv(priceX96_u256, 10 ** token1Decimals, 10 ** token0Decimals);
+
+        // if priceX96_u256 smaller than 10 ^ -16, return 0
+        // if priceX96_u256 larger than 10 ^ 18, return 0
+        // it is considered invalid
+        if (priceX96_u256 > MAX_PRICEX96 || priceX96_u256 < MIN_PRICEX96) {
+            priceX96_u256 = 0;
+        }
+
+        return uint160(priceX96_u256);
     }
 }

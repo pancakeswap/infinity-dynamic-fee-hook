@@ -7,7 +7,6 @@ import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
 import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {PriceFeedLib} from "./libraries/PriceFeedLib.sol";
-
 import {IPriceFeedTwoOracle} from "./interfaces/IPriceFeedTwoOracle.sol";
 
 /// @title PriceFeedTwoOracle
@@ -135,6 +134,7 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
         }
 
         // becasue oracle0 and oracle1 maybe will have different decimals,so we will calculate price with PriceFeedLib.PRECISION_DECIMALS(18)
+        // return price with decimals 18
         uint256 currentPrice = PriceFeedLib.calculatePriceForTwoOracles(
             oracle0Answer,
             priceFeedInfo.oracle0TargetTokenIndex,
