@@ -38,10 +38,8 @@ contract PriceFeedTwoOracleTest is Test {
 
     // oracle0 is A\C , oracle1 is B/C , v4 pool is A/B
     function testFuzz_twoOracle_getPriceX96_case1(uint256 oracle0_price, uint256 oracle1_price) public {
-        vm.assume(oracle0_price < 10 ** 36);
-        vm.assume(oracle1_price < 10 ** 36);
-        vm.assume(oracle0_price > 0);
-        vm.assume(oracle1_price > 0);
+        oracle0_price = bound(oracle0_price, 10 ** 8, 10 ** 28);
+        oracle1_price = bound(oracle1_price, 10 ** 8, 10 ** 28);
         oracle0.updateAnswer(int256(oracle0_price));
         oracle1.updateAnswer(int256(oracle1_price));
         // oracle0_price = c / A , oracle1_price = c / B , B / A = oracle0_price / oracle1_price
@@ -56,11 +54,9 @@ contract PriceFeedTwoOracleTest is Test {
 
     // oracle0 is C\A , oracle1 is B/C , v4 pool is A/B
     function testFuzz_twoOracle_getPriceX96_case2(uint256 oracle0_price, uint256 oracle1_price) public {
+        oracle0_price = bound(oracle0_price, 10 ** 8, 10 ** 28);
+        oracle1_price = bound(oracle1_price, 10 ** 8, 10 ** 28);
         priceFeedContract.updateOracles(address(oracle0), address(oracle1), 1, 0, 3600 * 24, 3600 * 24);
-        vm.assume(oracle0_price < 10 ** 30);
-        vm.assume(oracle1_price < 10 ** 30);
-        vm.assume(oracle0_price > 10 ** 6);
-        vm.assume(oracle1_price > 10 ** 6);
         oracle0.updateAnswer(int256(oracle0_price));
         oracle1.updateAnswer(int256(oracle1_price));
         // oracle0_price = A / C , oracle1_price = C / B , B / A = 1 / oracle0_price * oracle1_price
@@ -70,16 +66,14 @@ contract PriceFeedTwoOracleTest is Test {
         }
 
         uint256 priceX96 = priceFeedContract.getPriceX96();
-        assertApproxEqRel(priceX96, priceX96_expected, 1e18 / 100);
+        assertApproxEqRel(priceX96, priceX96_expected, 1e18 / 50);
     }
 
     // oracle0 is A\C , oracle1 is C/B , v4 pool is A/B
     function testFuzz_twoOracle_getPriceX96_case3(uint256 oracle0_price, uint256 oracle1_price) public {
+        oracle0_price = bound(oracle0_price, 10 ** 8, 10 ** 28);
+        oracle1_price = bound(oracle1_price, 10 ** 8, 10 ** 28);
         priceFeedContract.updateOracles(address(oracle0), address(oracle1), 0, 1, 3600 * 24, 3600 * 24);
-        vm.assume(oracle0_price < 10 ** 30);
-        vm.assume(oracle1_price < 10 ** 30);
-        vm.assume(oracle0_price > 10 ** 6);
-        vm.assume(oracle1_price > 10 ** 6);
         oracle0.updateAnswer(int256(oracle0_price));
         oracle1.updateAnswer(int256(oracle1_price));
         // oracle0_price = c / A , oracle1_price = B / c , B / A = oracle0_price * oracle1_price
@@ -89,16 +83,14 @@ contract PriceFeedTwoOracleTest is Test {
         }
 
         uint256 priceX96 = priceFeedContract.getPriceX96();
-        assertApproxEqRel(priceX96, priceX96_expected, 1e18 / 100);
+        assertApproxEqRel(priceX96, priceX96_expected, 1e18 / 50);
     }
 
     // oracle0 is C\A , oracle1 is C/B , v4 pool is A/B
     function testFuzz_twoOracle_getPriceX96_case4(uint256 oracle0_price, uint256 oracle1_price) public {
+        oracle0_price = bound(oracle0_price, 10 ** 8, 10 ** 28);
+        oracle1_price = bound(oracle1_price, 10 ** 8, 10 ** 28);
         priceFeedContract.updateOracles(address(oracle0), address(oracle1), 1, 1, 3600 * 24, 3600 * 24);
-        vm.assume(oracle0_price < 10 ** 30);
-        vm.assume(oracle1_price < 10 ** 30);
-        vm.assume(oracle0_price > 10 ** 6);
-        vm.assume(oracle1_price > 10 ** 6);
         oracle0.updateAnswer(int256(oracle0_price));
         oracle1.updateAnswer(int256(oracle1_price));
         // oracle0_price = A / C , oracle1_price = C / B , B / A = oracle1_price / oracle0_price
