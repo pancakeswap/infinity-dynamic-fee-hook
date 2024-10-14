@@ -151,8 +151,8 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
             priceFeedInfo.oracle1Decimals
         );
 
-        // if currentPrice smaller than 10 ^ -16, return 0
-        // if currentPrice larger than 10 ^ 18, return 0
+        // if currentPrice smaller than 10 ^ -10 * 10 ^ 18, return 0
+        // if currentPrice larger than 10 ^ 10 * 10 ^ 18, return 0
         // it is considered invalid
         if (currentPrice > MAX_PRICE || currentPrice < MIN_PRICE) {
             return 0;
