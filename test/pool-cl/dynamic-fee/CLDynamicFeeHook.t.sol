@@ -219,33 +219,33 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         PriceFeed priceFeed2 =
             new PriceFeed(address(token2), Currency.unwrap(currency0), address(defaultOracle), 0, 3600 * 24);
         vm.expectRevert(CLDynamicFeeHook.PriceFeedTokensNotMatch.selector);
-        dynamicFeeHook.addPoolConfig(key1, priceFeed2, MAX_DFF, DEFAULT_FEE);
+        dynamicFeeHook1.addPoolConfig(key1, priceFeed2, MAX_DFF, DEFAULT_FEE);
     }
 
     // DFFMaxTooLarge
     function test_addPoolConfig_revert_DFFMaxTooLarge() public {
         vm.expectRevert(CLDynamicFeeHook.DFFMaxTooLarge.selector);
-        dynamicFeeHook.addPoolConfig(key1, priceFeed, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE, DEFAULT_FEE);
+        dynamicFeeHook1.addPoolConfig(key1, priceFeed, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE, DEFAULT_FEE);
     }
 
     // BaseLpFeeTooLarge
     function test_addPoolConfig_revert_BaseLpFeeTooLarge() public {
         vm.expectRevert(CLDynamicFeeHook.BaseLpFeeTooLarge.selector);
-        dynamicFeeHook.addPoolConfig(key1, priceFeed, MAX_DFF, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
+        dynamicFeeHook1.addPoolConfig(key1, priceFeed, MAX_DFF, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
     }
 
     // BaseLpFeeTooLarge
     function test_addPoolConfig_revert_BaseLpFeeTooLarge_than_DFF() public {
         vm.expectRevert(CLDynamicFeeHook.BaseLpFeeTooLarge.selector);
-        dynamicFeeHook.addPoolConfig(key1, priceFeed, MAX_DFF, MAX_DFF / 5 + 1);
+        dynamicFeeHook1.addPoolConfig(key1, priceFeed, MAX_DFF, MAX_DFF / 5 + 1);
     }
 
     // addPoolConfig success
     function test_addPoolConfig_success() public {
         vm.expectEmit(true, true, true, true);
         emit CLDynamicFeeHook.UpdatePoolConfig(poolId1, priceFeed, MAX_DFF, DEFAULT_FEE);
-        dynamicFeeHook.addPoolConfig(key1, priceFeed, MAX_DFF, DEFAULT_FEE);
-        (IPriceFeed priceFeedContract, uint24 hook_DFF_max, uint24 baseLpFee) = dynamicFeeHook.poolConfigs(poolId1);
+        dynamicFeeHook1.addPoolConfig(key1, priceFeed, MAX_DFF, DEFAULT_FEE);
+        (IPriceFeed priceFeedContract, uint24 hook_DFF_max, uint24 baseLpFee) = dynamicFeeHook1.poolConfigs(poolId1);
         assertEq(address(priceFeedContract), address(priceFeed));
         assertEq(hook_DFF_max, MAX_DFF);
         assertEq(baseLpFee, DEFAULT_FEE);

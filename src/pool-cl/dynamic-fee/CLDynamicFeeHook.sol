@@ -6,6 +6,7 @@ import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
 import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.sol";
 import {LPFeeLibrary} from "pancake-v4-core/src/libraries/LPFeeLibrary.sol";
 import {PoolKey} from "pancake-v4-core/src/types/PoolKey.sol";
+import {IHooks} from "pancake-v4-core/src/interfaces/IHooks.sol";
 import {PoolId, PoolIdLibrary} from "pancake-v4-core/src/types/PoolId.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "pancake-v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "pancake-v4-core/src/types/Currency.sol";
@@ -22,10 +23,11 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     using PoolIdLibrary for PoolKey;
     using LPFeeLibrary for uint24;
 
+    // maxDynamicFee would be DFF_max * PIF_MAX. eg. if PIF_MAX is 200_000(0.2) and DFF_MAX is 100_000(0.1), it means max dynamicFee is 20_000(0.02) (2%)
     struct PoolConfig {
         IPriceFeed priceFeed;
         uint24 DFF_max; // in hundredth of bips
-        uint24 baseLpFee;
+        uint24 baseLpFee; // 3_000 means 0.3%
     }
 
     struct CallbackData {
@@ -88,7 +90,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         external
         onlyOwner
     {
-        if (!key.fee.isDynamicLPFee()) {
+        if (!key.fee.isDynamicLPFee() || key.hooks != IHooks(address(this))) {
             revert NotDynamicFeePool();
         }
 
