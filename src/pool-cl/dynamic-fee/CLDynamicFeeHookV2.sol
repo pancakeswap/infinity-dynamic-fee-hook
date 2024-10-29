@@ -17,24 +17,24 @@ import {
     SD59x18, uUNIT, UNIT, convert, inv, exp, lt, gt, uEXP_MIN_THRESHOLD, EXP_MAX_INPUT
 } from "prb-math/SD59x18.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
-import {IPriceFeed} from "./interfaces/IPriceFeed.sol";
 
-contract CLDynamicFeeHook is CLBaseHook, Ownable {
+contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     using PoolIdLibrary for PoolKey;
     using LPFeeLibrary for uint24;
 
     // maxDynamicFee would be DFF_max * PIF_MAX. eg. if PIF_MAX is 200_000(0.2) and DFF_MAX is 100_000(0.1), it means max dynamicFee is 20_000(0.02) (2%)
     struct PoolConfig {
-        IPriceFeed priceFeed;
-        uint24 DFF_max; // in hundredth of bips
+        uint24 alpha; // weight allocated to latest data point , 500_000 means 0.5
+        uint24 DFF_max; // 250_000 means 0.25
         uint24 baseLpFee; // 3_000 means 0.3%
     }
 
-    struct CallbackData {
-        address sender;
-        PoolKey key;
-        ICLPoolManager.SwapParams params;
-        bytes hookData;
+    struct EWVWAPParams {
+        // exponentially weighted sum of each volume data point
+        uint256 weightedVolume;
+        // exponentially weighted sum of each (price x volume) data point
+        // weightedPriceVolumeX96 = weightedPriceVolume * Q96
+        uint256 weightedPriceVolumeX96;
     }
 
     // ============================== Variables ================================
@@ -45,22 +45,29 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     // hooks will do nothing when this flag is true
     bool public emergencyFlag;
 
+    EWVWAPParams public latestEWVWAPParams;
+
+    // Exponentially Weighted VWAP (Volume weighted average price)
+    // ewVWAP = weighted_price_volume / weighted_volume
+    // latest ewVWAP * Q96
+    // if latestEWVWAPX96 is type(uint256).max , it means it is first swap , no dynamic fee
+    uint256 public latestEWVWAPX96 = type(uint256).max;
+
     mapping(PoolId id => PoolConfig) public poolConfigs;
 
     // ============================== Events ===================================
     event UpdateEmergencyFlag(bool flag);
-    event UpdatePoolConfig(PoolId indexed id, IPriceFeed priceFeed, uint24 DFF_max, uint24 baseLpFee);
+    event UpdatePoolConfig(PoolId indexed id, uint24 alpha, uint24 DFF_max, uint24 baseLpFee);
 
     // ============================== Errors ===================================
 
     error NotDynamicFeePool();
-    error PriceFeedTokensNotMatch();
-    error DFFMaxTooLarge();
-    error BaseLpFeeTooLarge();
+    error InvalidDFFMax();
+    error InvalidBaseLpFee();
     error DFFTooLarge();
+    error InvalidAlpha();
     error SwapAndRevert(uint160 sqrtPriceX96);
     error NotDynamicFeeHook();
-    error PriceFeedNotAvailable();
     error PoolAlreadyInitialized();
     error InvalidPoolConfig();
 
@@ -83,22 +90,12 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     /// @dev The pool must not be initialized
     /// @dev Can update config before the pool is initialized
     /// @param key The pool key
-    /// @param priceFeed The price feed contract
+    /// @param alpha The weight allocated to the latest data point
     /// @param DFF_max The maximum dynamic fee
     /// @param baseLpFee The base LP fee
-    function addPoolConfig(PoolKey calldata key, IPriceFeed priceFeed, uint24 DFF_max, uint24 baseLpFee)
-        external
-        onlyOwner
-    {
+    function addPoolConfig(PoolKey calldata key, uint24 alpha, uint24 DFF_max, uint24 baseLpFee) external onlyOwner {
         if (!key.fee.isDynamicLPFee() || key.hooks != IHooks(address(this))) {
             revert NotDynamicFeePool();
-        }
-
-        if (
-            address(priceFeed.token0()) != Currency.unwrap(key.currency0)
-                || address(priceFeed.token1()) != Currency.unwrap(key.currency1)
-        ) {
-            revert PriceFeedTokensNotMatch();
         }
 
         PoolId id = key.toId();
@@ -107,22 +104,26 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             revert PoolAlreadyInitialized();
         }
 
-        if (DFF_max >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
-            revert DFFMaxTooLarge();
+        if (DFF_max >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || DFF_max == 0) {
+            revert InvalidDFFMax();
         }
 
-        if (baseLpFee >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE) {
-            revert BaseLpFeeTooLarge();
+        if (baseLpFee >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || baseLpFee == 0) {
+            revert InvalidBaseLpFee();
+        }
+
+        if (alpha >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || alpha == 0) {
+            revert InvalidAlpha();
         }
 
         // baseLpFee should be smaller than max dynamic fee
         uint256 maxDynamicFee = DFF_max * PIF_MAX / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
         if (maxDynamicFee < baseLpFee) {
-            revert BaseLpFeeTooLarge();
+            revert InvalidBaseLpFee();
         }
 
-        poolConfigs[id] = PoolConfig({priceFeed: priceFeed, DFF_max: DFF_max, baseLpFee: baseLpFee});
-        emit UpdatePoolConfig(id, priceFeed, DFF_max, baseLpFee);
+        poolConfigs[id] = PoolConfig({alpha: alpha, DFF_max: DFF_max, baseLpFee: baseLpFee});
+        emit UpdatePoolConfig(id, alpha, DFF_max, baseLpFee);
     }
 
     function getHooksRegistrationBitmap() external pure override returns (uint16) {
@@ -135,7 +136,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
                 beforeRemoveLiquidity: false,
                 afterRemoveLiquidity: false,
                 beforeSwap: true,
-                afterSwap: false,
+                afterSwap: true,
                 beforeDonate: false,
                 afterDonate: false,
                 beforeSwapReturnsDelta: false,
@@ -159,13 +160,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
 
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
-        if (poolConfig.DFF_max == 0 || poolConfig.baseLpFee == 0 || address(poolConfig.priceFeed) == address(0)) {
+        if (poolConfig.DFF_max == 0 || poolConfig.baseLpFee == 0 || poolConfig.alpha == 0) {
             revert InvalidPoolConfig();
-        }
-
-        uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
-        if (priceX96Oracle == 0) {
-            revert PriceFeedNotAvailable();
         }
 
         poolManager.updateDynamicLPFee(key, poolConfig.baseLpFee);
@@ -188,9 +184,8 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        uint160 priceX96Oracle = _getOraclePriceX96(poolConfig.priceFeed);
-        // If the oracle price is not available, we will skip dynamic fee calculation
-        if (priceX96Oracle == 0) {
+        // if latestEWVWAPX96 is type(uint256).max , it means it is first swap , no dynamic fee
+        if (latestEWVWAPX96 == type(uint256).max) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
@@ -202,17 +197,15 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // oracle max decimals is 18, so min price is 1/10^18
         // when tick is -414486, pool price is 1/10^18, so we can use priceX96.
         // oracle will not work when tick is smaller than -414486
-        uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
+        uint256 priceX96Before = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96);
 
-        // Only charge dynamic fee when price_after_swap and price_oracle are on the same side compared to price_before_swap
-        // when zeroForOne is true, priceX96After is smaller than priceX96Before, so we can skip the calculation when priceX96Oracle is bigger than priceX96Before
-        // when zeroForOne is false, priceX96After is larger than priceX96Before, so we can skip the calculation when priceX96Oracle is smaller than priceX96Before
-        // SF = max{priceX96After - priceX96Before / priceX96Oracle - priceX96Before , 0}
-        // priceX96After - priceX96Before / priceX96Oracle - priceX96Before is negative in this case
-        // so SF is 0, we can skip simualtion, will save some gas
+        // Only charge dynamic fee when price_after_swap and ewVWAP are not on the same side compared to price_before_swap
+        // when zeroForOne is true, priceX96After is smaller than priceX96Before, so we can skip the calculation when ewVWAP is smaller than priceX96Before
+        // when zeroForOne is false, priceX96After is bigger than priceX96Before, so we can skip the calculation when ewVWAP is bigger than priceX96Before
+        //  we can skip simualtion, will save some gas
         if (
-            params.zeroForOne && priceX96Oracle >= priceX96Before
-                || !params.zeroForOne && priceX96Oracle <= priceX96Before
+            params.zeroForOne && latestEWVWAPX96 <= priceX96Before
+                || !params.zeroForOne && latestEWVWAPX96 >= priceX96Before
         ) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
@@ -228,6 +221,41 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, lpFee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
 
+    function afterSwap(
+        address,
+        PoolKey calldata key,
+        ICLPoolManager.SwapParams calldata,
+        BalanceDelta delta,
+        bytes calldata
+    ) external override returns (bytes4, int128) {
+        // weighted_volume : exponentially weighted sum of each volume data point
+        // weighted_volume = alpha * latest_volume_token0_amount + (1 - alpha) * previous_weighted_volume
+        // weighted_price_volume : exponentially weighted sum of each (price x volume) data point
+        // weighted_price_volume = alpha * latest_volume_token0_amount * price + (1 - alpha) * previous_weighted_price_volume
+        // weighted_price_volume_x96 = alpha * latest_volume_token0_amount * sqrtPriceX96 * sqrtPriceX96 / Q96 + (1 - alpha) * previous_weighted_price_volume_x96
+        // weighted_price_volume_x96 = (alpha * sqrtPriceX96) * (latest_volume_token0_amount * sqrtPriceX96) / Q96 + (1 - alpha) * previous_weighted_price_volume_x96
+        // ewVWAP = weighted_price_volume / weighted_volume
+        // alpha = weight allocated to latest data point
+        PoolId id = key.toId();
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
+        uint256 alpha = poolConfigs[id].alpha;
+        int128 delta0 = delta.amount0();
+        uint256 volumeToken0Amount = delta0 < 0 ? uint256(uint128(-delta0)) : uint256(uint128(delta0));
+        uint256 weightedVolume = (
+            alpha * volumeToken0Amount
+                + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedVolume
+        ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+        uint256 weightedPriceVolumeX96 = (
+            FullMath.mulDiv(volumeToken0Amount * sqrtPriceX96, alpha * sqrtPriceX96, FixedPoint96.Q96)
+                + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedPriceVolumeX96
+        ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+        latestEWVWAPX96 = weightedPriceVolumeX96 / weightedVolume;
+
+        // update latestEWVWAPParams
+        latestEWVWAPParams = EWVWAPParams(weightedVolume, weightedPriceVolumeX96);
+        return (this.afterSwap.selector, 0);
+    }
+
     /// @dev Get the dynamic fee for a swap
     /// @param key The pool key
     /// @param sqrtPriceX96AfterSwap The sqrt price after the swap
@@ -238,18 +266,17 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        uint160 priceX96Oracle = _getOraclePriceX96(poolConfig.priceFeed);
-        // If the oracle price is not available, we will skip dynamic fee calculation
-        if (priceX96Oracle == 0) {
+        // if latestEWVWAPX96 is type(uint256).max , it means it is first swap , no dynamic fee
+        if (latestEWVWAPX96 == type(uint256).max) {
             return 0;
         }
 
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
-        uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
-        uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
+        uint256 priceX96Before = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96);
+        uint256 priceX96After = FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96);
         if (
-            !(priceX96After > priceX96Before && priceX96Oracle > priceX96Before)
-                && !(priceX96After < priceX96Before && priceX96Oracle < priceX96Before)
+            !(priceX96After > priceX96Before && latestEWVWAPX96 <= priceX96Before)
+                && !(priceX96After < priceX96Before && latestEWVWAPX96 >= priceX96Before)
         ) {
             return 0;
         }
@@ -270,6 +297,10 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     }
 
     // ========================= Internal Functions ============================
+
+    function _calculateEWVWAPX96() internal pure returns (uint160) {
+        return 0;
+    }
 
     function _calculateDynamicFee(
         uint160 sqrtPriceX96Before,
@@ -404,15 +435,6 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
                 data[i - 4] = reason[i];
             }
             sqrtPriceX96 = abi.decode(data, (uint160));
-        }
-    }
-
-    /// @dev Get the oracle price , and make sure hook can still work even if the oracle is not available
-    function _getOraclePriceX96(IPriceFeed priceFeed) internal view returns (uint160 priceX96Oracle) {
-        try priceFeed.getPriceX96() returns (uint160 priceX96) {
-            priceX96Oracle = priceX96;
-        } catch {
-            // Do nothing
         }
     }
 }
