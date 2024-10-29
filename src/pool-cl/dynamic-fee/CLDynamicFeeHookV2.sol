@@ -64,7 +64,6 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     error NotDynamicFeePool();
     error InvalidDFFMax();
     error InvalidBaseLpFee();
-    error DFFTooLarge();
     error InvalidAlpha();
     error SwapAndRevert(uint160 sqrtPriceX96);
     error NotDynamicFeeHook();
