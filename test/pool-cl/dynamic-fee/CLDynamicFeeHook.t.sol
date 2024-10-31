@@ -308,7 +308,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         assertGt(liquidity, 0);
 
         // execute first swap which is no dynamic fee
-        executeOneSwap();
+        executeOneSwap(1 ether, true);
 
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
             ICLRouterBase.CLSwapExactInputSingleParams(key, is_zeroForOne, swap_amount, 0, 0, bytes(""));
@@ -326,8 +326,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         assertGt(liquidity, 0);
 
         // execute first swap which is no dynamic fee
-        executeOneSwap();
-        executeOneSwap();
+        executeOneSwap(1 ether, true);
+        executeOneSwap(1 ether, true);
         // collect fees
         bytes memory collect_calldata = CLLiquidityOperations.getCollectEncoded(1, ZERO_BYTES);
         lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
@@ -403,173 +403,159 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         assertEq(currency0_balance_after - currency0_balance_before, dynamic_fee_curreny0_amount);
     }
 
-    // function test_swap_with_dynamic_fee_oneForZero() external {
-    //     // set oracle price to 1.2
-    //     defaultOracle.updateAnswer(120 * 10 ** 16);
-    //     uint160 priceX96Oracle = priceFeed.getPriceX96();
-    //     assertEq(uint256(priceX96Oracle), 12 * FixedPoint96.Q96 / 10);
+    function test_swap_with_dynamic_fee_oneForZero() external {
+        uint128 liquidity = poolManager.getLiquidity(poolId);
+        assertGt(liquidity, 0);
 
-    //     uint128 liquidity = poolManager.getLiquidity(poolId);
-    //     assertGt(liquidity, 0);
+        // execute first swap which is no dynamic fee
+        executeOneSwap(1 ether, false);
+        executeOneSwap(1 ether, false);
+        // collect fees
+        bytes memory collect_calldata = CLLiquidityOperations.getCollectEncoded(1, ZERO_BYTES);
+        lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
+        bytes memory collect_calldata_2 = CLLiquidityOperations.getCollectEncoded(3, ZERO_BYTES);
+        lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
 
-    //     uint128 swap_amount = 155 ether;
-    //     ICLRouterBase.CLSwapExactInputSingleParams memory params =
-    //         ICLRouterBase.CLSwapExactInputSingleParams(key, false, swap_amount, 0, 0, bytes(""));
+        (,, uint256 ewVWAPX96) = dynamicFeeHook.poolEWVWAPParams(poolId);
+        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(poolId);
+        uint256 priceX96Before = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96);
+        // swap isZeroForOne is false , so it means priceAfter is bigger than priceBefore
+        // so only when ewVWAPX96 is smaller than priceX96Before, the dynamic fee will be charged
+        assertLt(ewVWAPX96, priceX96Before);
 
-    //     planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
-    //     bytes memory data = planner.finalizeSwap(key.currency1, key.currency0, ActionConstants.MSG_SENDER);
-    //     uint160 sqrtPriceX96BySimulation = 106972875297741101112193818055;
-    //     uint160 sqrtPriceX96AfterSwap = 80394797207286879964608885004;
-    //     uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96BySimulation);
-    //     assertGt(dynamic_fee, 0);
-    //     /*
-    //     Manual verification of dynamic fee calculation process
+        uint128 swap_amount = 155 ether;
+        ICLRouterBase.CLSwapExactInputSingleParams memory params =
+            ICLRouterBase.CLSwapExactInputSingleParams(key, false, swap_amount, 0, 0, bytes(""));
 
-    //     price_oracle = 1.2
-    //     price_before = 1 // tick = 0
-    //     price_after = 1.0001 ^ 6005 = 1.8229753555854578 // tick = 6005
-    //     PIF = ABS(price_after/price_before - 1) = 0.8229753555854578
-    //     DFF_MAX = 0.25
-    //     F = 0.0025
-    //     DFF = DFF_MAX * (1 - e^ -(PIF - F) / F) = 0.25
-    //     dynamic_fee = DFF * Min(PIF, 0.2) = 0.25 * 0.2 = 0.05
-    //     */
-    //     assertEq(dynamic_fee, 50000);
+        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
+        bytes memory data = planner.finalizeSwap(key.currency1, key.currency0, ActionConstants.MSG_SENDER);
+        uint160 sqrtPriceX96BySimulation = 106988681316162696847543730073;
+        uint160 sqrtPriceX96AfterSwap = 80410603225708475699958797022;
+        uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96BySimulation);
+        assertGt(dynamic_fee, 0);
 
-    //     vm.expectEmit(true, true, true, true);
-    //     // Simulation swap event
-    //     emit Swap(
-    //         poolId,
-    //         address(dynamicFeeHook),
-    //         150787838537480690636,
-    //         -155 ether,
-    //         sqrtPriceX96BySimulation,
-    //         10000000000000000000000,
-    //         6005,
-    //         DEFAULT_FEE,
-    //         0
-    //     );
-    //     vm.expectEmit(true, true, true, true);
-    //     // Real swap event
-    //     emit Swap(
-    //         poolId,
-    //         address(v4Router),
-    //         145113208012022961886,
-    //         -155 ether,
-    //         sqrtPriceX96AfterSwap,
-    //         10000000000000000000000,
-    //         292,
-    //         dynamic_fee,
-    //         0
-    //     );
+        assertEq(dynamic_fee, 50000);
 
-    //     snapStart("CLDynamicFeeHook#swap_with_dynamic_fee_oneForZero");
-    //     v4Router.executeActions(data);
-    //     snapEnd();
+        vm.expectEmit(true, true, true, true);
+        // Simulation swap event
+        emit Swap(
+            poolId,
+            address(dynamicFeeHook),
+            149887420973743618291,
+            -155 ether,
+            sqrtPriceX96BySimulation,
+            10000000000000000000000,
+            6008,
+            DEFAULT_FEE,
+            0
+        );
+        vm.expectEmit(true, true, true, true);
+        // Real swap event
+        emit Swap(
+            poolId,
+            address(v4Router),
+            145055745017898236407,
+            -155 ether,
+            sqrtPriceX96AfterSwap,
+            10000000000000000000000,
+            296,
+            dynamic_fee,
+            0
+        );
 
-    //     (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
-    //     // charge tokenIn fee
-    //     assertEq(feeGrowthGlobal0x128, 0);
-    //     assertGt(feeGrowthGlobal1x128, 0);
+        snapStart("CLDynamicFeeHook#swap_with_dynamic_fee_oneForZero");
+        v4Router.executeActions(data);
+        snapEnd();
 
-    //     // dynamic_fee_amount = tokenInAmount * dynamic_fee / 1_000_000 - 1;
-    //     // -1 is for calculation precision loss
-    //     uint256 dynamic_fee_curreny1_amount = swap_amount * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - 1;
+        (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
+        // charge tokenIn fee
+        assertEq(feeGrowthGlobal0x128, 0);
+        assertGt(feeGrowthGlobal1x128, 0);
 
-    //     assertEq(dynamic_fee_curreny1_amount, 7749999999999999999);
-    //     uint256 currency1_balance_before = currency1.balanceOfSelf();
-    //     // collect fees
-    //     bytes memory collect_calldata = CLLiquidityOperations.getCollectEncoded(1, ZERO_BYTES);
-    //     lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
-    //     bytes memory collect_calldata_2 = CLLiquidityOperations.getCollectEncoded(3, ZERO_BYTES);
-    //     lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
+        // dynamic_fee_amount = tokenInAmount * dynamic_fee / 1_000_000 - 1;
+        // -1 is for calculation precision loss
+        uint256 dynamic_fee_curreny1_amount = swap_amount * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - 1;
 
-    //     uint256 currency1_balance_after = currency1.balanceOfSelf();
-    //     assertEq(currency1_balance_after - currency1_balance_before, dynamic_fee_curreny1_amount);
-    // }
+        assertEq(dynamic_fee_curreny1_amount, 7749999999999999999);
+        uint256 currency1_balance_before = currency1.balanceOfSelf();
+        // collect fees
+        lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
+        lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
 
-    // function test_swap_with_dynamic_fee_DFF_not_max_and_PIF_not_max() external {
-    //     // set oracle price to 0.98
-    //     defaultOracle.updateAnswer(98 * 10 ** 16);
-    //     uint160 priceX96Oracle = priceFeed.getPriceX96();
-    //     assertEq(uint256(priceX96Oracle), 98 * FixedPoint96.Q96 / 100);
+        uint256 currency1_balance_after = currency1.balanceOfSelf();
+        assertEq(currency1_balance_after - currency1_balance_before, dynamic_fee_curreny1_amount);
+    }
 
-    //     uint128 liquidity = poolManager.getLiquidity(poolId);
-    //     assertGt(liquidity, 0);
+    function test_swap_with_dynamic_fee_DFF_not_max_and_PIF_not_max() external {
+        uint128 liquidity = poolManager.getLiquidity(poolId);
+        assertGt(liquidity, 0);
 
-    //     uint128 swap_amount = 100 ether;
-    //     ICLRouterBase.CLSwapExactInputSingleParams memory params =
-    //         ICLRouterBase.CLSwapExactInputSingleParams(key, true, swap_amount, 0, 0, bytes(""));
+        // execute first swap which is no dynamic fee
+        executeOneSwap(1 ether, true);
+        executeOneSwap(1 ether, true);
 
-    //     planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
-    //     bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
-    //     uint160 sqrtPriceX96BySimulation = 78445666986078207473990891197;
-    //     uint160 sqrtPriceX96AfterSwap = 78447537345937897253011017938;
-    //     uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96BySimulation);
-    //     assertGt(dynamic_fee, 0);
-    //     /*
-    //     Manual verification of dynamic fee calculation process
+        bytes memory collect_calldata = CLLiquidityOperations.getCollectEncoded(1, ZERO_BYTES);
+        lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
+        bytes memory collect_calldata_2 = CLLiquidityOperations.getCollectEncoded(2, ZERO_BYTES);
+        lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
 
-    //     price_oracle = 0.98
-    //     price_before = 1 // tick = 0
-    //     price_after = 1.0001 ^ -199 = 0.9802976734059232 // tick = - 199
-    //     SF = price_after - price_before / price_oracle - price_before = 0.9851163297038381
-    //     IP = 1 - price_oracle / price_before = 0.02
-    //     PIF = SF * IP = 0.0197023265940768
-    //     DFF_MAX = 0.25
-    //     F = 0.0025
-    //     DFF = DFF_MAX * (1 - e^ -(PIF - F) / F) = 0.2497432030848177
-    //     dynamic_fee = DFF * Min(PIF, 0.2) = 0.2497432030848177 * 0.0197023265940768 = 0.004918
-    //     diff = 4918 / 4908 = 0.00203 , 0.2% precision loss
-    //     */
-    //     assertEq(dynamic_fee, 4908);
+        uint128 swap_amount = 100 ether;
+        ICLRouterBase.CLSwapExactInputSingleParams memory params =
+            ICLRouterBase.CLSwapExactInputSingleParams(key, true, swap_amount, 0, 0, bytes(""));
 
-    //     vm.expectEmit(true, true, true, true);
-    //     // Simulation swap event
-    //     emit Swap(
-    //         poolId,
-    //         address(dynamicFeeHook),
-    //         -100 ether,
-    //         98764820911408698235,
-    //         sqrtPriceX96BySimulation,
-    //         10000000000000000000000,
-    //         -199,
-    //         DEFAULT_FEE,
-    //         0
-    //     );
-    //     vm.expectEmit(true, true, true, true);
-    //     // Real swap event
-    //     emit Swap(
-    //         poolId,
-    //         address(v4Router),
-    //         -100 ether,
-    //         98528748307888070442,
-    //         sqrtPriceX96AfterSwap,
-    //         10000000000000000000000,
-    //         -199,
-    //         dynamic_fee,
-    //         0
-    //     );
-    //     v4Router.executeActions(data);
-    //     (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
-    //     // charge tokenIn fee
-    //     assertGt(feeGrowthGlobal0x128, 0);
-    //     assertEq(feeGrowthGlobal1x128, 0);
+        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
+        bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
+        uint160 sqrtPriceX96BySimulation = 78430174701761267576585976321;
+        uint160 sqrtPriceX96AfterSwap = 78432043546488751772885896151;
+        uint24 dynamic_fee = dynamicFeeHook.getDynamicFee(key, sqrtPriceX96BySimulation);
+        assertGt(dynamic_fee, 0);
 
-    //     // dynamic_fee_amount = tokenInAmount * dynamic_fee / 1_000_000 - 1;
-    //     // -1 is for calculation precision loss
-    //     uint256 dynamic_fee_curreny0_amount = swap_amount * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - 1;
-    //     assertEq(dynamic_fee_curreny0_amount, 490799999999999999);
-    //     uint256 currency0_balance_before = currency0.balanceOfSelf();
-    //     // collect fees
-    //     bytes memory collect_calldata = CLLiquidityOperations.getCollectEncoded(1, ZERO_BYTES);
-    //     lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
-    //     // bytes memory collect_calldata_2 = CLLiquidityOperations.getCollectEncoded(2, ZERO_BYTES);
-    //     // lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
+        assertEq(dynamic_fee, 4907);
 
-    //     uint256 currency0_balance_after = currency0.balanceOfSelf();
-    //     assertEq(currency0_balance_after - currency0_balance_before, dynamic_fee_curreny0_amount);
-    // }
+        vm.expectEmit(true, true, true, true);
+        // Simulation swap event
+        emit Swap(
+            poolId,
+            address(dynamicFeeHook),
+            -100 ether,
+            98725620023355435648,
+            sqrtPriceX96BySimulation,
+            10000000000000000000000,
+            -203,
+            DEFAULT_FEE,
+            0
+        );
+        vm.expectEmit(true, true, true, true);
+        // Real swap event
+        emit Swap(
+            poolId,
+            address(v4Router),
+            -100 ether,
+            98489738656404923934,
+            sqrtPriceX96AfterSwap,
+            10000000000000000000000,
+            -202,
+            dynamic_fee,
+            0
+        );
+        v4Router.executeActions(data);
+        (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
+        // charge tokenIn fee
+        assertGt(feeGrowthGlobal0x128, 0);
+        assertEq(feeGrowthGlobal1x128, 0);
+
+        // dynamic_fee_amount = tokenInAmount * dynamic_fee / 1_000_000 - 1;
+        // -1 is for calculation precision loss
+        uint256 dynamic_fee_curreny0_amount = swap_amount * dynamic_fee / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - 1;
+        assertEq(dynamic_fee_curreny0_amount, 490699999999999999);
+        uint256 currency0_balance_before = currency0.balanceOfSelf();
+        // collect fees
+        lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
+        lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
+
+        uint256 currency0_balance_after = currency0.balanceOfSelf();
+        assertEq(currency0_balance_after - currency0_balance_before, dynamic_fee_curreny0_amount);
+    }
 
     // setEmergencyFlag
     function test_setEmergencyFlag() public {
@@ -582,13 +568,17 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         assertEq(emergencyFlag, true);
     }
 
-    function executeOneSwap() internal {
-        ICLRouterBase.CLSwapExactInputSingleParams memory first_swap_params =
-            ICLRouterBase.CLSwapExactInputSingleParams(key, true, 1 ether, 0, 0, bytes(""));
+    function executeOneSwap(uint128 amountIn, bool zeroForOne) internal {
+        ICLRouterBase.CLSwapExactInputSingleParams memory params =
+            ICLRouterBase.CLSwapExactInputSingleParams(key, zeroForOne, amountIn, 0, 0, bytes(""));
 
-        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(first_swap_params));
-        bytes memory first_swap_data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
-        v4Router.executeActions(first_swap_data);
+        planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
+        bytes memory data = planner.finalizeSwap(
+            zeroForOne ? key.currency0 : key.currency1,
+            zeroForOne ? key.currency1 : key.currency0,
+            ActionConstants.MSG_SENDER
+        );
+        v4Router.executeActions(data);
     }
 
     receive() external payable {}
