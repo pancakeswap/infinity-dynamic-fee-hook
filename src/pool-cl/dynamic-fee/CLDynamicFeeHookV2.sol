@@ -195,9 +195,6 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // when tick is -665454, sqrtPrice is 281482911877014 , priceX96 is 281482911877014 * 281482911877014 / 2^96 = 1
         // priceX96 will not be available when tick is smaller than -665454
         // pool_price = token1/token0 = 1/2 ** 96, which is very small
-        // oracle max decimals is 18, so min price is 1/10^18
-        // when tick is -414486, pool price is 1/10^18, so we can use priceX96.
-        // oracle will not work when tick is smaller than -414486
         uint256 priceX96Before = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96);
 
         // Only charge dynamic fee when price_after_swap and ewVWAP are not on the same side compared to price_before_swap
@@ -233,18 +230,21 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // weighted_volume = alpha * latest_volume_token0_amount + (1 - alpha) * previous_weighted_volume
         // weighted_price_volume : exponentially weighted sum of each (price x volume) data point
         // weighted_price_volume = alpha * latest_volume_token0_amount * price + (1 - alpha) * previous_weighted_price_volume
-        // weighted_price_volume_x96 = alpha * latest_volume_token0_amount * sqrtPriceX96 * sqrtPriceX96 / Q96 + (1 - alpha) * previous_weighted_price_volume_x96
-        // weighted_price_volume_x96 = (alpha * sqrtPriceX96) * (latest_volume_token0_amount * sqrtPriceX96) / Q96 + (1 - alpha) * previous_weighted_price_volume_x96
+        // weighted_price_volume_x96 = alpha * latest_volume_token0_amount * sqrtPriceX96 * sqrtPriceX96 / (Q96 * Q96) + (1 - alpha) * previous_weighted_price_volume
+        // weighted_price_volume_x96 = (alpha * sqrtPriceX96) * (latest_volume_token0_amount * sqrtPriceX96) / (Q96 * Q96)  + (1 - alpha) * previous_weighted_price_volume
         // ewVWAP = weighted_price_volume / weighted_volume
+        // ewVWAP_X96 = weighted_price_volume * Q96 / weighted_volume
         // alpha = weight allocated to latest data point
-        PoolId id = key.toId();
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
-        uint256 alpha = poolConfigs[id].alpha;
         int128 delta0 = delta.amount0();
         if (delta0 == 0) {
             return (this.afterSwap.selector, 0);
         }
         uint256 volumeToken0Amount = delta0 < 0 ? uint256(uint128(-delta0)) : uint256(uint128(delta0));
+
+        PoolId id = key.toId();
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
+        uint256 alpha = poolConfigs[id].alpha;
+
         EWVWAPParams storage latestEWVWAPParams = poolEWVWAPParams[id];
         uint256 weightedVolume = (
             alpha * volumeToken0Amount
@@ -309,10 +309,6 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     }
 
     // ========================= Internal Functions ============================
-
-    function _calculateEWVWAPX96() internal pure returns (uint160) {
-        return 0;
-    }
 
     function _calculateDynamicFee(
         uint160 sqrtPriceX96Before,
