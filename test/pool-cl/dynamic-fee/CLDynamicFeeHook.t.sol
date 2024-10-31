@@ -30,6 +30,7 @@ import {LPFeeLibrary} from "pancake-v4-core/src/libraries/LPFeeLibrary.sol";
 import {CLPoolParametersHelper} from "pancake-v4-core/src/pool-cl/libraries/CLPoolParametersHelper.sol";
 import {PosmTestSetup} from "pancake-v4-periphery/test/pool-cl/shared/PosmTestSetup.sol";
 import {CLLiquidityOperations} from "pancake-v4-periphery/test/pool-cl/shared/CLLiquidityOperations.sol";
+import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
 import {CLDynamicFeeHookV2} from "../../../src/pool-cl/dynamic-fee/CLDynamicFeeHookV2.sol";
 // import "forge-std/console2.sol";
 
@@ -332,6 +333,13 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         lpm.modifyLiquidities(collect_calldata, block.timestamp + 1);
         bytes memory collect_calldata_2 = CLLiquidityOperations.getCollectEncoded(2, ZERO_BYTES);
         lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
+
+        (,, uint256 ewVWAPX96) = dynamicFeeHook.poolEWVWAPParams(poolId);
+        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(poolId);
+        uint256 priceX96Before = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96);
+        // swap isZeroForOne is true , so it means priceAfter is smaller than priceBefore
+        // so only when ewVWAPX96 is bigger than priceX96Before, the dynamic fee will be charged
+        assertGt(ewVWAPX96, priceX96Before);
 
         uint128 swap_amount = 155 ether;
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
