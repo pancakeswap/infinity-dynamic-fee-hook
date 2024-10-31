@@ -33,8 +33,11 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // exponentially weighted sum of each volume data point
         uint256 weightedVolume;
         // exponentially weighted sum of each (price x volume) data point
-        // weightedPriceVolumeX96 = weightedPriceVolume * Q96
-        uint256 weightedPriceVolumeX96;
+        uint256 weightedPriceVolume;
+        // Exponentially Weighted VWAP (Volume weighted average price)
+        // ewVWAP = weighted_price_volume / weighted_volume
+        // ewVWAPX96 = ewVWAP * Q96
+        uint256 ewVWAPX96;
     }
 
     // ============================== Variables ================================
@@ -45,13 +48,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     // hooks will do nothing when this flag is true
     bool public emergencyFlag;
 
-    EWVWAPParams public latestEWVWAPParams;
-
-    // Exponentially Weighted VWAP (Volume weighted average price)
-    // ewVWAP = weighted_price_volume / weighted_volume
-    // latest ewVWAP * Q96
-    // if latestEWVWAPX96 is type(uint256).max , it means it is first swap , no dynamic fee
-    uint256 public latestEWVWAPX96 = type(uint256).max;
+    mapping(PoolId id => EWVWAPParams) public poolEWVWAPParams;
 
     mapping(PoolId id => PoolConfig) public poolConfigs;
 
@@ -183,8 +180,13 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        // if latestEWVWAPX96 is type(uint256).max , it means it is first swap , no dynamic fee
-        if (latestEWVWAPX96 == type(uint256).max) {
+        EWVWAPParams memory latestEWVWAPParams = poolEWVWAPParams[id];
+        uint256 latestEWVWAPX96 = latestEWVWAPParams.ewVWAPX96;
+        // if latestEWVWAPParams is empty , it means it is first swap , no dynamic fee
+        if (
+            latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0
+                && latestEWVWAPX96 == 0
+        ) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
@@ -239,19 +241,25 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
         uint256 alpha = poolConfigs[id].alpha;
         int128 delta0 = delta.amount0();
+        if (delta0 == 0) {
+            return (this.afterSwap.selector, 0);
+        }
         uint256 volumeToken0Amount = delta0 < 0 ? uint256(uint128(-delta0)) : uint256(uint128(delta0));
+        EWVWAPParams storage latestEWVWAPParams = poolEWVWAPParams[id];
         uint256 weightedVolume = (
             alpha * volumeToken0Amount
                 + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedVolume
         ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
-        uint256 weightedPriceVolumeX96 = (
-            FullMath.mulDiv(volumeToken0Amount * sqrtPriceX96, alpha * sqrtPriceX96, FixedPoint96.Q96)
-                + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedPriceVolumeX96
+        uint256 weightedPriceVolume = (
+            FullMath.mulDiv(
+                volumeToken0Amount * sqrtPriceX96, alpha * sqrtPriceX96, FixedPoint96.Q96 * FixedPoint96.Q96
+            ) + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedPriceVolume
         ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
-        latestEWVWAPX96 = weightedPriceVolumeX96 / weightedVolume;
+        // TODO: check oveflow cases
+        latestEWVWAPParams.ewVWAPX96 = FullMath.mulDiv(weightedPriceVolume, FixedPoint96.Q96, weightedVolume);
 
-        // update latestEWVWAPParams
-        latestEWVWAPParams = EWVWAPParams(weightedVolume, weightedPriceVolumeX96);
+        latestEWVWAPParams.weightedVolume = weightedVolume;
+        latestEWVWAPParams.weightedPriceVolume = weightedPriceVolume;
         return (this.afterSwap.selector, 0);
     }
 
@@ -265,8 +273,13 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        // if latestEWVWAPX96 is type(uint256).max , it means it is first swap , no dynamic fee
-        if (latestEWVWAPX96 == type(uint256).max) {
+        EWVWAPParams memory latestEWVWAPParams = poolEWVWAPParams[id];
+        uint256 latestEWVWAPX96 = poolEWVWAPParams[id].ewVWAPX96;
+        // if latestEWVWAPParams is empty , it means it is first swap , no dynamic fee
+        if (
+            latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0
+                && latestEWVWAPX96 == 0
+        ) {
             return 0;
         }
 
