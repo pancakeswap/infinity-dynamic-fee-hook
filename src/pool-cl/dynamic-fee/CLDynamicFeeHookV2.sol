@@ -246,6 +246,8 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         uint256 alpha = poolConfigs[id].alpha;
 
         EWVWAPParams storage latestEWVWAPParams = poolEWVWAPParams[id];
+        // TODO: check oveflow cases about weightedVolume and weightedPriceVolume
+        // weightedVolume is always greater than 0 , bceause alpha and volumeToken0Amount are always greater than 0
         uint256 weightedVolume = (
             alpha * volumeToken0Amount
                 + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedVolume
@@ -255,6 +257,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
                 volumeToken0Amount * sqrtPriceX96, alpha * sqrtPriceX96, FixedPoint96.Q96 * FixedPoint96.Q96
             ) + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedPriceVolume
         ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+
         // TODO: check oveflow cases
         latestEWVWAPParams.ewVWAPX96 = FullMath.mulDiv(weightedPriceVolume, FixedPoint96.Q96, weightedVolume);
 
