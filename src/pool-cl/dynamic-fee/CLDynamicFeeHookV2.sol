@@ -36,11 +36,35 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         uint256 weightedPriceVolume;
         // Exponentially Weighted VWAP (Volume weighted average price)
         // ewVWAP = weighted_price_volume / weighted_volume
-        // ewVWAPX96 = ewVWAP * Q96
-        uint256 ewVWAPX96;
+        // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
+        // ewVWAPX =  ewVWAP * VWAPX_A
+        uint256 ewVWAPX;
     }
 
     // ============================== Variables ================================
+
+    // V4 tick range is between -887272 and 887272
+    // sqrtPriceX96[-887272] is 4295128739
+    // sqrtPriceX96[887272] is 1461446703485210103287273052203988822378723970342
+    // So use sqrtPriceX96[-887272] * sqrtPriceX96[-887272] as precision
+    // PRICE_PRECISION = sqrtPriceX96[-887272] * sqrtPriceX96[-887272] = 18448130884583730000
+    // priceX = sqrtPriceX96 * sqrtPriceX96 / PRICE_PRECISION
+    // priceX[-887272] = sqrtPriceX96[-887272] * sqrtPriceX96[-887272] / PRICE_PRECISION = 1
+    // priceX[887272] = sqrtPriceX96[887272] * sqrtPriceX96[887272] / PRICE_PRECISION = 115774680941395604863474304587699109860222437082614414580284557381589562228688 , which is smaller than type(uint256).max
+    // then we can check whole v4 pool price range using ewVWAPX
+    uint256 public PRICE_PRECISION = 18448130884583730000;
+
+    // v4_pool_price = (sqrtPriceX96 / Q96) * (sqrtPriceX96 / Q96)
+    // priceX = sqrtPriceX96 * sqrtPriceX96 / PRICE_PRECISION
+    // priceX = v4_pool_price * (Q96 * Q96 / PRICE_PRECISION)
+    // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
+    // VWAPX_A = Q96 * Q96 / PRICE_PRECISION
+    // A menas amplification factor
+    uint256 public VWAPX_A = 340256786698763678858396856460488307819;
+
+    // MAX_PRICE = sqrtPriceX96[887272] * sqrtPriceX96[887272] / Q96^2
+    uint256 public MAX_PRICE = 340256786836388094070642339899681172762;
+
     // 0.2 * ONE_HUNDRED_PERCENT_FEE
     uint256 private constant PIF_MAX = 200_000;
 
@@ -181,30 +205,22 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         PoolConfig memory poolConfig = poolConfigs[id];
 
         EWVWAPParams memory latestEWVWAPParams = poolEWVWAPParams[id];
-        uint256 latestEWVWAPX96 = latestEWVWAPParams.ewVWAPX96;
+        uint256 latestewVWAPX = latestEWVWAPParams.ewVWAPX;
         // if latestEWVWAPParams is empty , it means it is first swap , no dynamic fee
-        if (
-            latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0
-                && latestEWVWAPX96 == 0
-        ) {
+        if (latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0 && latestewVWAPX == 0)
+        {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
-        // Fix TODO : should we skip cases when tick is smaller than -665454?  this situation will hardly occur in a normal pool。
-        // when tick is -665454, sqrtPrice is 281482911877014 , priceX96 is 281482911877014 * 281482911877014 / 2^96 = 1
-        // priceX96 will not be available when tick is smaller than -665454
-        // pool_price = token1/token0 = 1/2 ** 96, which is very small
-        uint256 priceX96Before = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96);
+        // priceX = sqrtPriceX96 * sqrtPriceX96 / PRICE_PRECISION
+        uint256 priceXBefore = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, PRICE_PRECISION);
 
         // Only charge dynamic fee when price_after_swap and ewVWAP are not on the same side compared to price_before_swap
-        // when zeroForOne is true, priceX96After is smaller than priceX96Before, so we can skip the calculation when ewVWAP is smaller than priceX96Before
-        // when zeroForOne is false, priceX96After is bigger than priceX96Before, so we can skip the calculation when ewVWAP is bigger than priceX96Before
+        // when zeroForOne is true, priceXAfter is smaller than priceXBefore, so we can skip the calculation when ewVWAPX is smaller than priceXBefore
+        // when zeroForOne is false, priceXAfter is bigger than priceXBefore, so we can skip the calculation when ewVWAPX is bigger than priceXBefore
         //  we can skip simualtion, will save some gas
-        if (
-            params.zeroForOne && latestEWVWAPX96 <= priceX96Before
-                || !params.zeroForOne && latestEWVWAPX96 >= priceX96Before
-        ) {
+        if (params.zeroForOne && latestewVWAPX <= priceXBefore || !params.zeroForOne && latestewVWAPX >= priceXBefore) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
         // get the sqrt price after the swap by simulating the swap
@@ -258,8 +274,13 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
             ) + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedPriceVolume
         ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
 
-        // TODO: check oveflow cases
-        latestEWVWAPParams.ewVWAPX96 = FullMath.mulDiv(weightedPriceVolume, FixedPoint96.Q96, weightedVolume);
+        // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
+        // if weightedPriceVolume / weightedVolume is greater than MAX_PRICE, we will set ewVWAPX as MAX_PRICE * VWAPX_A
+        if (weightedPriceVolume / MAX_PRICE > weightedVolume) {
+            latestEWVWAPParams.ewVWAPX = MAX_PRICE * VWAPX_A;
+        } else {
+            latestEWVWAPParams.ewVWAPX = FullMath.mulDiv(weightedPriceVolume, VWAPX_A, weightedVolume);
+        }
 
         latestEWVWAPParams.weightedVolume = weightedVolume;
         latestEWVWAPParams.weightedPriceVolume = weightedPriceVolume;
@@ -277,21 +298,19 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         PoolConfig memory poolConfig = poolConfigs[id];
 
         EWVWAPParams memory latestEWVWAPParams = poolEWVWAPParams[id];
-        uint256 latestEWVWAPX96 = poolEWVWAPParams[id].ewVWAPX96;
+        uint256 latestewVWAPX = poolEWVWAPParams[id].ewVWAPX;
         // if latestEWVWAPParams is empty , it means it is first swap , no dynamic fee
-        if (
-            latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0
-                && latestEWVWAPX96 == 0
-        ) {
+        if (latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0 && latestewVWAPX == 0)
+        {
             return 0;
         }
 
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
-        uint256 priceX96Before = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96);
-        uint256 priceX96After = FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96);
+        uint256 priceXBefore = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, PRICE_PRECISION);
+        uint256 priceXAfter = FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, PRICE_PRECISION);
         if (
-            !(priceX96After > priceX96Before && latestEWVWAPX96 <= priceX96Before)
-                && !(priceX96After < priceX96Before && latestEWVWAPX96 >= priceX96Before)
+            !(priceXAfter > priceXBefore && latestewVWAPX <= priceXBefore)
+                && !(priceXAfter < priceXBefore && latestewVWAPX >= priceXAfter)
         ) {
             return 0;
         }

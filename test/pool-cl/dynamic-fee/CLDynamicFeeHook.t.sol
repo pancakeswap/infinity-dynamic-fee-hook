@@ -38,6 +38,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     using Planner for Plan;
     using CurrencyLibrary for Currency;
 
+    uint256 public PRICE_PRECISION = 18448130884583730000;
+
     CLDynamicFeeHookV2 dynamicFeeHook;
     CLDynamicFeeHookV2 dynamicFeeHook1;
 
@@ -254,11 +256,11 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         uint128 liquidity = poolManager.getLiquidity(poolId);
         assertGt(liquidity, 0);
         {
-            (uint256 weightedVolume, uint256 weightedPriceVolume, uint256 ewVWAPX96) =
+            (uint256 weightedVolume, uint256 weightedPriceVolume, uint256 ewVWAPX) =
                 dynamicFeeHook.poolEWVWAPParams(poolId);
             assertEq(weightedVolume, 0);
             assertEq(weightedPriceVolume, 0);
-            assertEq(ewVWAPX96, 0);
+            assertEq(ewVWAPX, 0);
         }
 
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
@@ -293,11 +295,11 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
 
         // poolEWVWAPParams was updated after swap
         {
-            (uint256 weightedVolume, uint256 weightedPriceVolume, uint256 ewVWAPX96) =
+            (uint256 weightedVolume, uint256 weightedPriceVolume, uint256 ewVWAPX) =
                 dynamicFeeHook.poolEWVWAPParams(poolId);
             assertGt(weightedVolume, 0);
             assertGt(weightedPriceVolume, 0);
-            assertGt(ewVWAPX96, 0);
+            assertGt(ewVWAPX, 0);
         }
     }
 
@@ -334,12 +336,12 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         bytes memory collect_calldata_2 = CLLiquidityOperations.getCollectEncoded(2, ZERO_BYTES);
         lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
 
-        (,, uint256 ewVWAPX96) = dynamicFeeHook.poolEWVWAPParams(poolId);
+        (,, uint256 ewVWAPX) = dynamicFeeHook.poolEWVWAPParams(poolId);
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(poolId);
-        uint256 priceX96Before = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96);
+        uint256 priceXBefore = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, PRICE_PRECISION);
         // swap isZeroForOne is true , so it means priceAfter is smaller than priceBefore
-        // so only when ewVWAPX96 is bigger than priceX96Before, the dynamic fee will be charged
-        assertGt(ewVWAPX96, priceX96Before);
+        // so only when ewVWAPX is bigger than priceXBefore, the dynamic fee will be charged
+        assertGt(ewVWAPX, priceXBefore);
 
         uint128 swap_amount = 155 ether;
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
@@ -416,12 +418,12 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         bytes memory collect_calldata_2 = CLLiquidityOperations.getCollectEncoded(3, ZERO_BYTES);
         lpm.modifyLiquidities(collect_calldata_2, block.timestamp + 1);
 
-        (,, uint256 ewVWAPX96) = dynamicFeeHook.poolEWVWAPParams(poolId);
+        (,, uint256 ewVWAPX) = dynamicFeeHook.poolEWVWAPParams(poolId);
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(poolId);
-        uint256 priceX96Before = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96);
+        uint256 priceXBefore = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, PRICE_PRECISION);
         // swap isZeroForOne is false , so it means priceAfter is bigger than priceBefore
-        // so only when ewVWAPX96 is smaller than priceX96Before, the dynamic fee will be charged
-        assertLt(ewVWAPX96, priceX96Before);
+        // so only when ewVWAPX is smaller than priceXBefore, the dynamic fee will be charged
+        assertLt(ewVWAPX, priceXBefore);
 
         uint128 swap_amount = 155 ether;
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
