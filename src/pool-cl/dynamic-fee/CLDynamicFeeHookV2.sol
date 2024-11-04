@@ -507,12 +507,10 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
             if (selector != SwapAndRevert.selector) {
                 revert();
             }
-            // Extract data by trimming the custom error selector (first 4 bytes)
-            bytes memory data = new bytes(reason.length - 4);
-            for (uint256 i = 4; i < reason.length; ++i) {
-                data[i - 4] = reason[i];
+
+            assembly {
+                sqrtPriceX96 := mload(add(reason, 0x24))
             }
-            sqrtPriceX96 = abi.decode(data, (uint160));
         }
     }
 }
