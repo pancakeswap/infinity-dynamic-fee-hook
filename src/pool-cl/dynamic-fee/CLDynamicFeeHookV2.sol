@@ -266,6 +266,10 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // ewVWAP = weighted_price_volume / weighted_volume
         // ewVWAP_X96 = weighted_price_volume * Q96 / weighted_volume
         int128 delta0 = delta.amount0();
+        // will skip when delta0 is 0
+        if (delta0 == 0) {
+            return (this.afterSwap.selector, 0);
+        }
         uint256 volumeToken0Amount = delta0 < 0 ? uint256(uint128(-delta0)) : uint256(uint128(delta0));
 
         PoolId id = key.toId();
