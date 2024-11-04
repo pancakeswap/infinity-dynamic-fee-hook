@@ -275,6 +275,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
 
         // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
+        // ewVWAPX =  ewVWAP * VWAPX_A
         // if weightedPriceVolume / weightedVolume is greater than MAX_PRICE, we will set ewVWAPX as MAX_PRICE * VWAPX_A
         if (weightedPriceVolume / MAX_PRICE > weightedVolume) {
             latestEWVWAPParams.ewVWAPX = MAX_PRICE * VWAPX_A;
