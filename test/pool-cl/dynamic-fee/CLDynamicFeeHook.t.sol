@@ -32,7 +32,6 @@ import {PosmTestSetup} from "pancake-v4-periphery/test/pool-cl/shared/PosmTestSe
 import {CLLiquidityOperations} from "pancake-v4-periphery/test/pool-cl/shared/CLLiquidityOperations.sol";
 import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
 import {CLDynamicFeeHookV2} from "../../../src/pool-cl/dynamic-fee/CLDynamicFeeHookV2.sol";
-// import "forge-std/console2.sol";
 
 contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     using Planner for Plan;
@@ -109,7 +108,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         });
         poolId = key.toId();
         // add pool config in hook
-        dynamicFeeHook.addPoolConfig(key, DEFAULT_Alpha, MAX_DFF, DEFAULT_FEE);
+        dynamicFeeHook.updatePoolConfig(key, DEFAULT_Alpha, MAX_DFF, DEFAULT_FEE);
         poolManager.initialize(key, SQRT_RATIO_1_1, ZERO_BYTES);
 
         // mint position , tokenId is 1
@@ -195,7 +194,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     }
 
     // NotDynamicFeePool
-    function test_addPoolConfig_revert_NotDynamicFeePool() public {
+    function test_updatePoolConfig_revert_NotDynamicFeePool() public {
         PoolKey memory key_not_dynamic = PoolKey({
             currency0: currency0,
             currency1: currency1,
@@ -207,32 +206,38 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             )
         });
         vm.expectRevert(CLDynamicFeeHookV2.NotDynamicFeePool.selector);
-        dynamicFeeHook.addPoolConfig(key_not_dynamic, DEFAULT_Alpha, MAX_DFF, DEFAULT_FEE);
+        dynamicFeeHook.updatePoolConfig(key_not_dynamic, DEFAULT_Alpha, MAX_DFF, DEFAULT_FEE);
     }
 
     // InvalidDFFMax
-    function test_addPoolConfig_revert_InvalidDFFMax() public {
+    function test_updatePoolConfig_revert_InvalidDFFMax() public {
         vm.expectRevert(CLDynamicFeeHookV2.InvalidDFFMax.selector);
-        dynamicFeeHook1.addPoolConfig(key1, DEFAULT_Alpha, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE, DEFAULT_FEE);
+        dynamicFeeHook1.updatePoolConfig(key1, DEFAULT_Alpha, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE, DEFAULT_FEE);
     }
 
     // InvalidBaseLpFee
-    function test_addPoolConfig_revert_InvalidBaseLpFee() public {
+    function test_updatePoolConfig_revert_InvalidBaseLpFee() public {
         vm.expectRevert(CLDynamicFeeHookV2.InvalidBaseLpFee.selector);
-        dynamicFeeHook1.addPoolConfig(key1, DEFAULT_Alpha, MAX_DFF, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
+        dynamicFeeHook1.updatePoolConfig(key1, DEFAULT_Alpha, MAX_DFF, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE);
     }
 
     // InvalidBaseLpFee
-    function test_addPoolConfig_revert_BaseLpFee_larger_than_DFF() public {
+    function test_updatePoolConfig_revert_BaseLpFee_larger_than_DFF() public {
         vm.expectRevert(CLDynamicFeeHookV2.InvalidBaseLpFee.selector);
-        dynamicFeeHook1.addPoolConfig(key1, DEFAULT_Alpha, MAX_DFF, MAX_DFF / 5 + 1);
+        dynamicFeeHook1.updatePoolConfig(key1, DEFAULT_Alpha, MAX_DFF, MAX_DFF / 5 + 1);
     }
 
-    // // addPoolConfig success
-    function test_addPoolConfig_success() public {
+    // InvalidAlpha
+    function test_updatePoolConfig_revert_InvalidAlpha() public {
+        vm.expectRevert(CLDynamicFeeHookV2.InvalidAlpha.selector);
+        dynamicFeeHook1.updatePoolConfig(key1, LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE, MAX_DFF, DEFAULT_FEE);
+    }
+
+    // updatePoolConfig success
+    function test_updatePoolConfig_success() public {
         vm.expectEmit(true, true, true, true);
         emit CLDynamicFeeHookV2.UpdatePoolConfig(poolId1, DEFAULT_Alpha, MAX_DFF, DEFAULT_FEE);
-        dynamicFeeHook1.addPoolConfig(key1, DEFAULT_Alpha, MAX_DFF, DEFAULT_FEE);
+        dynamicFeeHook1.updatePoolConfig(key1, DEFAULT_Alpha, MAX_DFF, DEFAULT_FEE);
         (uint24 alpha, uint24 hook_DFF_max, uint24 baseLpFee) = dynamicFeeHook1.poolConfigs(poolId1);
         assertEq(alpha, DEFAULT_Alpha);
         assertEq(hook_DFF_max, MAX_DFF);
@@ -241,7 +246,6 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
 
     // InvalidPoolConfig when pool initialized
     function test_afterInitialize_revert_InvalidPoolConfig() public {
-        // vm.expectRevert(CLDynamicFeeHookV2.InvalidPoolConfig.selector);
         vm.expectRevert(
             abi.encodeWithSelector(
                 Hooks.Wrap__FailedHookCall.selector,
@@ -557,6 +561,29 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
 
         uint256 currency0_balance_after = currency0.balanceOfSelf();
         assertEq(currency0_balance_after - currency0_balance_before, dynamic_fee_curreny0_amount);
+    }
+
+    // updatePoolConfig after pool is initialized
+    function test_updatePoolConfig_afterPoolInitialized() public {
+        (uint24 alpha_old, uint24 hook_DFF_max_old, uint24 baseLpFee_old) = dynamicFeeHook.poolConfigs(poolId);
+        assertEq(alpha_old, DEFAULT_Alpha);
+        assertEq(hook_DFF_max_old, MAX_DFF);
+        assertEq(baseLpFee_old, DEFAULT_FEE);
+        (,,, uint24 lpFee_old) = poolManager.getSlot0(poolId);
+        assertEq(lpFee_old, DEFAULT_FEE);
+
+        uint24 newLPFee = DEFAULT_FEE + 1000;
+        uint24 newAlpha = DEFAULT_Alpha + 1000;
+        uint24 newDFF = MAX_DFF + 1000;
+        vm.expectEmit(true, true, true, true);
+        emit CLDynamicFeeHookV2.UpdatePoolConfig(poolId, newAlpha, newDFF, newLPFee);
+        dynamicFeeHook.updatePoolConfig(key, newAlpha, newDFF, newLPFee);
+        (uint24 alpha, uint24 hook_DFF_max, uint24 baseLpFee) = dynamicFeeHook.poolConfigs(poolId);
+        assertEq(alpha, newAlpha);
+        assertEq(hook_DFF_max, newDFF);
+        assertEq(baseLpFee, newLPFee);
+        (,,, uint24 lpFee) = poolManager.getSlot0(poolId);
+        assertEq(lpFee, newLPFee);
     }
 
     // setEmergencyFlag

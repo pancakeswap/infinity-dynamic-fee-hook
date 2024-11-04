@@ -118,24 +118,19 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         emit UpdateEmergencyFlag(flag);
     }
 
-    /// @notice Add new dynamic fee configuration for a pool
+    /// @notice Update dynamic fee configuration for a pool
     /// @dev Only owner can call this function
-    /// @dev The pool must be a dynamic fee pool
-    /// @dev The pool must not be initialized
-    /// @dev Can update config before the pool is initialized
+    /// @dev The pool must be a dynamic fee pool and the hook must be this contract
     /// @param key The pool key
     /// @param alpha The weight allocated to the latest data point
     /// @param DFF_max The maximum dynamic fee
     /// @param baseLpFee The base LP fee
-    function addPoolConfig(PoolKey calldata key, uint24 alpha, uint24 DFF_max, uint24 baseLpFee) external onlyOwner {
+    function updatePoolConfig(PoolKey calldata key, uint24 alpha, uint24 DFF_max, uint24 baseLpFee)
+        external
+        onlyOwner
+    {
         if (!key.fee.isDynamicLPFee() || key.hooks != IHooks(address(this))) {
             revert NotDynamicFeePool();
-        }
-
-        PoolId id = key.toId();
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
-        if (sqrtPriceX96 != 0) {
-            revert PoolAlreadyInitialized();
         }
 
         if (DFF_max >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || DFF_max == 0) {
@@ -156,6 +151,12 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
             revert InvalidBaseLpFee();
         }
 
+        PoolId id = key.toId();
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
+        // need to update base lp fee when pool was initialized
+        if (sqrtPriceX96 != 0) {
+            poolManager.updateDynamicLPFee(key, baseLpFee);
+        }
         poolConfigs[id] = PoolConfig({alpha: alpha, DFF_max: DFF_max, baseLpFee: baseLpFee});
         emit UpdatePoolConfig(id, alpha, DFF_max, baseLpFee);
     }
@@ -188,10 +189,6 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         poolManagerOnly
         returns (bytes4)
     {
-        if (!key.fee.isDynamicLPFee()) {
-            revert NotDynamicFeePool();
-        }
-
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
         if (poolConfig.DFF_max == 0 || poolConfig.baseLpFee == 0 || poolConfig.alpha == 0) {
