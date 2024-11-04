@@ -248,6 +248,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         BalanceDelta delta,
         bytes calldata
     ) external override returns (bytes4, int128) {
+        // alpha : weight allocated to latest data point
         // weighted_volume : exponentially weighted sum of each volume data point
         // weighted_volume = alpha * latest_volume_token0_amount + (1 - alpha) * previous_weighted_volume
         // weighted_price_volume : exponentially weighted sum of each (price x volume) data point
@@ -256,7 +257,6 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // weighted_price_volume_x96 = (alpha * sqrtPriceX96) * (latest_volume_token0_amount * sqrtPriceX96) / (Q96 * Q96)  + (1 - alpha) * previous_weighted_price_volume
         // ewVWAP = weighted_price_volume / weighted_volume
         // ewVWAP_X96 = weighted_price_volume * Q96 / weighted_volume
-        // alpha = weight allocated to latest data point
         int128 delta0 = delta.amount0();
         if (delta0 == 0) {
             return (this.afterSwap.selector, 0);
