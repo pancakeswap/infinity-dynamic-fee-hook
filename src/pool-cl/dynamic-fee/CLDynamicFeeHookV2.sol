@@ -52,7 +52,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     // priceX[-887272] = sqrtPriceX96[-887272] * sqrtPriceX96[-887272] / PRICE_PRECISION = 1
     // priceX[887272] = sqrtPriceX96[887272] * sqrtPriceX96[887272] / PRICE_PRECISION = 115774680941395604863474304587699109860222437082614414580284557381589562228688 , which is smaller than type(uint256).max
     // then we can check whole v4 pool price range using ewVWAPX
-    uint256 public PRICE_PRECISION = 18448130884583730000;
+    uint256 public constant PRICE_PRECISION = 18448130884583730000;
 
     // v4_pool_price = (sqrtPriceX96 / Q96) * (sqrtPriceX96 / Q96)
     // priceX = sqrtPriceX96 * sqrtPriceX96 / PRICE_PRECISION
@@ -60,10 +60,16 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
     // VWAPX_A = Q96 * Q96 / PRICE_PRECISION
     // A menas amplification factor
-    uint256 public VWAPX_A = 340256786698763678858396856460488307819;
+    uint256 public constant VWAPX_A = 340256786698763678858396856460488307819;
 
     // MAX_PRICE = sqrtPriceX96[887272] * sqrtPriceX96[887272] / Q96^2
-    uint256 public MAX_PRICE = 340256786836388094070642339899681172762;
+    uint256 public constant MAX_PRICE = 340256786836388094070642339899681172762;
+
+    uint256 private constant MAX_U256 = type(uint256).max;
+
+    uint256 private constant DEFAULT_OVERFLOW_FACTOR = 1;
+
+    uint256 private constant OVERFLOW_FACTOR = 10 ** 10;
 
     // 0.2 * ONE_HUNDRED_PERCENT_FEE
     uint256 private constant PIF_MAX = 200_000;
@@ -264,15 +270,42 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         EWVWAPParams storage latestEWVWAPParams = poolEWVWAPParams[id];
         // TODO: check oveflow cases about weightedVolume and weightedPriceVolume
         // weightedVolume is always greater than 0 , bceause alpha and volumeToken0Amount are always greater than 0
+        // because max volumeToken0Amount is type(int128).max ,so weightedVolume will not be overflow
+        // weightedVolume = alpha * volumeToken0Amount + (1 - alpha) * last_weightedVolume
         uint256 weightedVolume = (
             alpha * volumeToken0Amount
                 + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedVolume
         ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
-        uint256 weightedPriceVolume = (
-            FullMath.mulDiv(
-                volumeToken0Amount * sqrtPriceX96, alpha * sqrtPriceX96, FixedPoint96.Q96 * FixedPoint96.Q96
-            ) + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedPriceVolume
-        ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+        // max volumeToken0Amount is type(int128).max , max sqrtPriceX96 is sqrtPriceX96[887272]
+        // volumeToken0Amount * sqrtPriceX96 will be overflow in some cases
+        // so we will use overflowFactor to avoid overflow
+        // Why not directly use OVERFLOW_FACTOR? When volumeToken0Amount and sqrtPriceX96 are very small, some precision might be lost.
+        uint256 overflowFactorOne = DEFAULT_OVERFLOW_FACTOR;
+        if (MAX_U256 / volumeToken0Amount < sqrtPriceX96) {
+            overflowFactorOne = OVERFLOW_FACTOR;
+        }
+
+        // weightedPriceVolume = alpha * volumeToken0Amount * v4_price + (1 - alpha) * last_weightedPriceVolume
+        // weightedPriceVolume = alpha * volumeToken0Amount * sqrtPriceX96 * sqrtPriceX96 / (Q96 * Q96) + (1 - alpha) * last_weightedPriceVolume
+        // weightedPriceVolumeDelta = alpha * volumeToken0Amount * sqrtPriceX96 * sqrtPriceX96 / (Q96 * Q96)
+        uint256 weightedPriceVolumeDelta = FullMath.mulDiv(
+            FullMath.mulDiv(volumeToken0Amount, sqrtPriceX96, overflowFactorOne),
+            alpha * sqrtPriceX96,
+            FixedPoint96.Q96 * FixedPoint96.Q96 * LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / overflowFactorOne
+        );
+
+        // Why not directly use OVERFLOW_FACTOR? When vweightedPriceVolume is very small, some precision might be lost.
+        uint256 overflowFactorTwo = DEFAULT_OVERFLOW_FACTOR;
+        if (MAX_U256 / (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) < latestEWVWAPParams.weightedPriceVolume) {
+            overflowFactorTwo = OVERFLOW_FACTOR;
+        }
+
+        uint256 weightedPriceVolume = weightedPriceVolumeDelta
+            + FullMath.mulDiv(
+                LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha,
+                latestEWVWAPParams.weightedPriceVolume / overflowFactorTwo,
+                LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / overflowFactorTwo
+            );
 
         // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
         // ewVWAPX =  ewVWAP * VWAPX_A
