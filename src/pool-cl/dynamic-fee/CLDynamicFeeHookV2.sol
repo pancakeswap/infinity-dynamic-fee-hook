@@ -258,9 +258,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // ewVWAP = weighted_price_volume / weighted_volume
         // ewVWAP_X96 = weighted_price_volume * Q96 / weighted_volume
         int128 delta0 = delta.amount0();
-        if (delta0 == 0) {
-            return (this.afterSwap.selector, 0);
-        }
+
         uint256 volumeToken0Amount = delta0 < 0 ? uint256(uint128(-delta0)) : uint256(uint128(delta0));
 
         PoolId id = key.toId();
@@ -269,13 +267,18 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
 
         EWVWAPParams storage latestEWVWAPParams = poolEWVWAPParams[id];
         // TODO: check oveflow cases about weightedVolume and weightedPriceVolume
-        // weightedVolume is always greater than 0 , bceause alpha and volumeToken0Amount are always greater than 0
         // because max volumeToken0Amount is type(int128).max ,so weightedVolume will not be overflow
         // weightedVolume = alpha * volumeToken0Amount + (1 - alpha) * last_weightedVolume
         uint256 weightedVolume = (
             alpha * volumeToken0Amount
                 + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedVolume
         ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+
+        // will skip the calculation when weightedVolume is 0
+        if(weightedVolume == 0){
+            return (this.afterSwap.selector, 0);
+        }
+
         // max volumeToken0Amount is type(int128).max , max sqrtPriceX96 is sqrtPriceX96[887272]
         // volumeToken0Amount * sqrtPriceX96 will be overflow in some cases
         // so we will use overflowFactor to avoid overflow
