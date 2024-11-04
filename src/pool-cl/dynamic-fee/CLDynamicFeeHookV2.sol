@@ -18,6 +18,14 @@ import {
 } from "prb-math/SD59x18.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
+/**
+ * CLDynamicFeeHookV2 use ewVWAP to determine whether will charge the dynamic fee
+ * weighted_volume = alpha * volume_token0_amount + (1 - alpha) * previous_weighted_volume
+ * weighted_price_volume = alpha * volume_token0_amount * price + (1 - alpha) * previous_weighted_price_volume
+ * ewVWAP = weighted_price_volume / weighted_volume
+ * if v4 pool price move in the same direction as ewVWAP, we will not charge dynamic fee
+ * if v4 pool price move in the opposite direction as ewVWAP, we will charge dynamic fee
+ */
 contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     using PoolIdLibrary for PoolKey;
     using LPFeeLibrary for uint24;
@@ -258,7 +266,6 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // ewVWAP = weighted_price_volume / weighted_volume
         // ewVWAP_X96 = weighted_price_volume * Q96 / weighted_volume
         int128 delta0 = delta.amount0();
-
         uint256 volumeToken0Amount = delta0 < 0 ? uint256(uint128(-delta0)) : uint256(uint128(delta0));
 
         PoolId id = key.toId();
@@ -275,7 +282,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
 
         // will skip the calculation when weightedVolume is 0
-        if(weightedVolume == 0){
+        if (weightedVolume == 0) {
             return (this.afterSwap.selector, 0);
         }
 
@@ -284,7 +291,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // so we will use overflowFactor to avoid overflow
         // Why not directly use OVERFLOW_FACTOR? When volumeToken0Amount and sqrtPriceX96 are very small, some precision might be lost.
         uint256 overflowFactorOne = DEFAULT_OVERFLOW_FACTOR;
-        if (MAX_U256 / volumeToken0Amount < sqrtPriceX96) {
+        if (MAX_U256 / sqrtPriceX96 < volumeToken0Amount) {
             overflowFactorOne = OVERFLOW_FACTOR;
         }
 
