@@ -304,10 +304,10 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
             FixedPoint96.Q96 * FixedPoint96.Q96 * LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / overflowFactorOne
         );
 
-        // Why not directly use OVERFLOW_FACTOR? When vweightedPriceVolume is very small, some precision might be lost.
+        // Why not directly use ONE_HUNDRED_PERCENT_FEE ? When vweightedPriceVolume is very small, some precision might be lost.
         uint256 overflowFactorTwo = DEFAULT_OVERFLOW_FACTOR;
         if (MAX_U256 / (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) < latestEWVWAPParams.weightedPriceVolume) {
-            overflowFactorTwo = OVERFLOW_FACTOR;
+            overflowFactorTwo = LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
         }
 
         uint256 weightedPriceVolume = weightedPriceVolumeDelta
