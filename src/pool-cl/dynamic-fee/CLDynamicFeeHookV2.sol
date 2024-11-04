@@ -216,9 +216,9 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         PoolConfig memory poolConfig = poolConfigs[id];
 
         EWVWAPParams memory latestEWVWAPParams = poolEWVWAPParams[id];
-        uint256 latestewVWAPX = latestEWVWAPParams.ewVWAPX;
+        uint256 latestEWVWAPX = latestEWVWAPParams.ewVWAPX;
         // if latestEWVWAPParams is empty , it means it is first swap , no dynamic fee
-        if (latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0 && latestewVWAPX == 0)
+        if (latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0 && latestEWVWAPX == 0)
         {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
@@ -231,7 +231,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // when zeroForOne is true, priceXAfter is smaller than priceXBefore, so we can skip the calculation when ewVWAPX is smaller than priceXBefore
         // when zeroForOne is false, priceXAfter is bigger than priceXBefore, so we can skip the calculation when ewVWAPX is bigger than priceXBefore
         //  we can skip simualtion, will save some gas
-        if (params.zeroForOne && latestewVWAPX <= priceXBefore || !params.zeroForOne && latestewVWAPX >= priceXBefore) {
+        if (params.zeroForOne && latestEWVWAPX <= priceXBefore || !params.zeroForOne && latestEWVWAPX >= priceXBefore) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
         // get the sqrt price after the swap by simulating the swap
@@ -258,10 +258,9 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // weighted_volume = alpha * latest_volume_token0_amount + (1 - alpha) * previous_weighted_volume
         // weighted_price_volume : exponentially weighted sum of each (price x volume) data point
         // weighted_price_volume = alpha * latest_volume_token0_amount * price + (1 - alpha) * previous_weighted_price_volume
-        // weighted_price_volume_x96 = alpha * latest_volume_token0_amount * sqrtPriceX96 * sqrtPriceX96 / (Q96 * Q96) + (1 - alpha) * previous_weighted_price_volume
-        // weighted_price_volume_x96 = (alpha * sqrtPriceX96) * (latest_volume_token0_amount * sqrtPriceX96) / (Q96 * Q96)  + (1 - alpha) * previous_weighted_price_volume
+        // weighted_price_volume = alpha * latest_volume_token0_amount * sqrtPriceX96 * sqrtPriceX96 / (Q96 * Q96) + (1 - alpha) * previous_weighted_price_volume
         // ewVWAP = weighted_price_volume / weighted_volume
-        // ewVWAP_X96 = weighted_price_volume * Q96 / weighted_volume
+        // ewVWAP_X= weighted_price_volume * VWAPX_A / weighted_volume
         int128 delta0 = delta.amount0();
         // will skip when delta0 is 0
         if (delta0 == 0) {
@@ -343,9 +342,9 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         PoolConfig memory poolConfig = poolConfigs[id];
 
         EWVWAPParams memory latestEWVWAPParams = poolEWVWAPParams[id];
-        uint256 latestewVWAPX = poolEWVWAPParams[id].ewVWAPX;
+        uint256 latestEWVWAPX = poolEWVWAPParams[id].ewVWAPX;
         // if latestEWVWAPParams is empty , it means it is first swap , no dynamic fee
-        if (latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0 && latestewVWAPX == 0)
+        if (latestEWVWAPParams.weightedVolume == 0 && latestEWVWAPParams.weightedPriceVolume == 0 && latestEWVWAPX == 0)
         {
             return 0;
         }
@@ -354,8 +353,8 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         uint256 priceXBefore = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, PRICE_PRECISION);
         uint256 priceXAfter = FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, PRICE_PRECISION);
         if (
-            !(priceXAfter > priceXBefore && latestewVWAPX <= priceXBefore)
-                && !(priceXAfter < priceXBefore && latestewVWAPX >= priceXAfter)
+            !(priceXAfter > priceXBefore && latestEWVWAPX <= priceXBefore)
+                && !(priceXAfter < priceXBefore && latestEWVWAPX >= priceXAfter)
         ) {
             return 0;
         }
