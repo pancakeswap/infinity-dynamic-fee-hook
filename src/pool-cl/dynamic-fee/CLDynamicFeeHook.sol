@@ -163,7 +163,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             revert InvalidPoolConfig();
         }
 
-        uint160 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
+        uint256 priceX96Oracle = poolConfig.priceFeed.getPriceX96();
         if (priceX96Oracle == 0) {
             revert PriceFeedNotAvailable();
         }
@@ -188,7 +188,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        uint160 priceX96Oracle = _getOraclePriceX96(poolConfig.priceFeed);
+        uint256 priceX96Oracle = _getOraclePriceX96(poolConfig.priceFeed);
         // If the oracle price is not available, we will skip dynamic fee calculation
         if (priceX96Oracle == 0) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
@@ -202,7 +202,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         // oracle max decimals is 18, so min price is 1/10^18
         // when tick is -414486, pool price is 1/10^18, so we can use priceX96.
         // oracle will not work when tick is smaller than -414486
-        uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
+        uint256 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
 
         // Only charge dynamic fee when price_after_swap and price_oracle are on the same side compared to price_before_swap
         // when zeroForOne is true, priceX96After is smaller than priceX96Before, so we can skip the calculation when priceX96Oracle is bigger than priceX96Before
@@ -238,15 +238,15 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
         PoolId id = key.toId();
         PoolConfig memory poolConfig = poolConfigs[id];
 
-        uint160 priceX96Oracle = _getOraclePriceX96(poolConfig.priceFeed);
+        uint256 priceX96Oracle = _getOraclePriceX96(poolConfig.priceFeed);
         // If the oracle price is not available, we will skip dynamic fee calculation
         if (priceX96Oracle == 0) {
             return 0;
         }
 
         (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
-        uint160 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
-        uint160 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
+        uint256 priceX96Before = uint160(FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, FixedPoint96.Q96));
+        uint256 priceX96After = uint160(FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, FixedPoint96.Q96));
         if (
             !(priceX96After > priceX96Before && priceX96Oracle > priceX96Before)
                 && !(priceX96After < priceX96Before && priceX96Oracle < priceX96Before)
@@ -398,18 +398,15 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             if (selector != SwapAndRevert.selector) {
                 revert();
             }
-            // Extract data by trimming the custom error selector (first 4 bytes)
-            bytes memory data = new bytes(reason.length - 4);
-            for (uint256 i = 4; i < reason.length; ++i) {
-                data[i - 4] = reason[i];
+            assembly {
+                sqrtPriceX96 := mload(add(reason, 0x24))
             }
-            sqrtPriceX96 = abi.decode(data, (uint160));
         }
     }
 
     /// @dev Get the oracle price , and make sure hook can still work even if the oracle is not available
-    function _getOraclePriceX96(IPriceFeed priceFeed) internal view returns (uint160 priceX96Oracle) {
-        try priceFeed.getPriceX96() returns (uint160 priceX96) {
+    function _getOraclePriceX96(IPriceFeed priceFeed) internal view returns (uint256 priceX96Oracle) {
+        try priceFeed.getPriceX96() returns (uint256 priceX96) {
             priceX96Oracle = priceX96;
         } catch {
             // Do nothing

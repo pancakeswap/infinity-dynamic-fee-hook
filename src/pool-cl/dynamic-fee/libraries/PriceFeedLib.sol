@@ -65,7 +65,7 @@ library PriceFeedLib {
     function calculatePriceX96(uint256 price, uint8 token0Decimals, uint8 token1Decimals, uint8 oracleDecimals)
         internal
         pure
-        returns (uint160 priceX96)
+        returns (uint256 priceX96)
     {
         // v4_pool_price = v4_pool_token1_amount / v4_pool_token0_amount
         // token1_real_amount = v4_pool_token1_amount / 10 ** token1Decimals
@@ -77,6 +77,6 @@ library PriceFeedLib {
         uint256 priceX96_u256 = FullMath.mulDiv(price, FixedPoint96.Q96, 10 ** oracleDecimals);
         priceX96_u256 = FullMath.mulDiv(priceX96_u256, 10 ** token1Decimals, 10 ** token0Decimals);
 
-        return uint160(priceX96_u256);
+        return priceX96_u256;
     }
 }

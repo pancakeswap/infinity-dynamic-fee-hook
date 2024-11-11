@@ -79,7 +79,7 @@ contract PriceFeed is IPriceFeed, Ownable {
 
     /// @dev Get the latest price
     /// @return priceX96 The latest price
-    function getPriceX96() external view virtual returns (uint160 priceX96) {
+    function getPriceX96() external view virtual returns (uint256 priceX96) {
         PriceFeedInfo memory priceFeedInfo = info;
         (, int256 answer,, uint256 updatedAt,) = priceFeedInfo.oracle.latestRoundData();
         // can not revert, we must make sure hooks can still work even if the price is not available

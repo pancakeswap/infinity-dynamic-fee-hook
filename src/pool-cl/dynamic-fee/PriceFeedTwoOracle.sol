@@ -124,7 +124,7 @@ contract PriceFeedTwoOracle is IPriceFeedTwoOracle, Ownable {
     /// @dev Some edge cases will still have some issues ,now only support oracle price between 10^-10 and 10^10.
     /// @dev Will try to fix all the edge cases in the future if we decide to use this contract
     /// @return priceX96 The latest price
-    function getPriceX96() external view virtual returns (uint160 priceX96) {
+    function getPriceX96() external view virtual returns (uint256 priceX96) {
         PriceFeedInfo memory priceFeedInfo = info;
         (, int256 oracle0Answer,, uint256 oracle0UpdatedAt,) = priceFeedInfo.oracle0.latestRoundData();
         (, int256 oracle1Answer,, uint256 oracle1UpdatedAt,) = priceFeedInfo.oracle1.latestRoundData();

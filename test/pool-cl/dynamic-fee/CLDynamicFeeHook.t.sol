@@ -334,7 +334,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     function test_swap_with_dynamic_fee_zeroForOne() external {
         // set oracle price to 0.8
         defaultOracle.updateAnswer(80 * 10 ** 16);
-        uint160 priceX96Oracle = priceFeed.getPriceX96();
+        uint256 priceX96Oracle = priceFeed.getPriceX96();
         assertEq(uint256(priceX96Oracle), 8 * FixedPoint96.Q96 / 10);
 
         uint128 liquidity = poolManager.getLiquidity(poolId);
@@ -420,7 +420,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     function test_swap_with_dynamic_fee_oneForZero() external {
         // set oracle price to 1.2
         defaultOracle.updateAnswer(120 * 10 ** 16);
-        uint160 priceX96Oracle = priceFeed.getPriceX96();
+        uint256 priceX96Oracle = priceFeed.getPriceX96();
         assertEq(uint256(priceX96Oracle), 12 * FixedPoint96.Q96 / 10);
 
         uint128 liquidity = poolManager.getLiquidity(poolId);
@@ -505,7 +505,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     function test_swap_with_dynamic_fee_DFF_not_max_and_PIF_not_max() external {
         // set oracle price to 0.98
         defaultOracle.updateAnswer(98 * 10 ** 16);
-        uint160 priceX96Oracle = priceFeed.getPriceX96();
+        uint256 priceX96Oracle = priceFeed.getPriceX96();
         assertEq(uint256(priceX96Oracle), 98 * FixedPoint96.Q96 / 100);
 
         uint128 liquidity = poolManager.getLiquidity(poolId);

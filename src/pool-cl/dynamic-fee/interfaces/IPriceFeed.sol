@@ -23,5 +23,5 @@ interface IPriceFeed {
 
     function token1() external view returns (IERC20Metadata);
 
-    function getPriceX96() external view returns (uint160 priceX96);
+    function getPriceX96() external view returns (uint256 priceX96);
 }
