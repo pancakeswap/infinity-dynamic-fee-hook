@@ -86,12 +86,15 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     // hooks will do nothing when this flag is true
     bool public emergencyFlag;
 
+    PoolConfig public defaultPoolConfig;
+
     mapping(PoolId id => EWVWAPParams) public poolEWVWAPParams;
 
     mapping(PoolId id => PoolConfig) public poolConfigs;
 
     // ============================== Events ===================================
     event UpdateEmergencyFlag(bool flag);
+    event UpdateDefaultPoolConfig(uint24 alpha, uint24 DFF_max, uint24 baseLpFee);
     event UpdatePoolConfig(PoolId indexed id, uint24 alpha, uint24 DFF_max, uint24 baseLpFee);
 
     // ============================== Errors ===================================
@@ -109,7 +112,18 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
 
     // ========================= External Functions ============================
 
-    constructor(ICLPoolManager poolManager) Ownable(msg.sender) CLBaseHook(poolManager) {}
+    constructor(ICLPoolManager poolManager, PoolConfig memory config) Ownable(msg.sender) CLBaseHook(poolManager) {
+        _checkPoolConfig(config);
+        defaultPoolConfig = config;
+    }
+
+    /// @dev Update the default pool configuration
+    /// @param config The new default pool configuration
+    function updateDefaultPoolConfig(PoolConfig memory config) external onlyOwner {
+        _checkPoolConfig(config);
+        defaultPoolConfig = config;
+        emit UpdateDefaultPoolConfig(config.alpha, config.DFF_max, config.baseLpFee);
+    }
 
     /// @dev Set the emergency flag
     /// @param flag The emergency flag
@@ -122,43 +136,21 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     /// @dev Only owner can call this function
     /// @dev The pool must be a dynamic fee pool and the hook must be this contract
     /// @param key The pool key
-    /// @param alpha The weight allocated to the latest data point
-    /// @param DFF_max The maximum dynamic fee
-    /// @param baseLpFee The base LP fee
-    function updatePoolConfig(PoolKey calldata key, uint24 alpha, uint24 DFF_max, uint24 baseLpFee)
-        external
-        onlyOwner
-    {
+    /// @param config The new pool configuration
+    function updatePoolConfig(PoolKey calldata key, PoolConfig memory config) external onlyOwner {
+        _checkPoolConfig(config);
         if (!key.fee.isDynamicLPFee() || key.hooks != IHooks(address(this))) {
             revert NotDynamicFeePool();
-        }
-
-        if (DFF_max >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || DFF_max == 0) {
-            revert InvalidDFFMax();
-        }
-
-        if (baseLpFee >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || baseLpFee == 0) {
-            revert InvalidBaseLpFee();
-        }
-
-        if (alpha >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || alpha == 0) {
-            revert InvalidAlpha();
-        }
-
-        // baseLpFee should be smaller than max dynamic fee
-        uint256 maxDynamicFee = DFF_max * PIF_MAX / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
-        if (maxDynamicFee < baseLpFee) {
-            revert InvalidBaseLpFee();
         }
 
         PoolId id = key.toId();
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
         // need to update base lp fee when pool was initialized
         if (sqrtPriceX96 != 0) {
-            poolManager.updateDynamicLPFee(key, baseLpFee);
+            poolManager.updateDynamicLPFee(key, config.baseLpFee);
         }
-        poolConfigs[id] = PoolConfig({alpha: alpha, DFF_max: DFF_max, baseLpFee: baseLpFee});
-        emit UpdatePoolConfig(id, alpha, DFF_max, baseLpFee);
+        poolConfigs[id] = config;
+        emit UpdatePoolConfig(id, config.alpha, config.DFF_max, config.baseLpFee);
     }
 
     function getHooksRegistrationBitmap() external pure override returns (uint16) {
@@ -189,10 +181,18 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         poolManagerOnly
         returns (bytes4)
     {
+        if (!key.fee.isDynamicLPFee()) {
+            revert NotDynamicFeePool();
+        }
+
         PoolId id = key.toId();
-        PoolConfig memory poolConfig = poolConfigs[id];
+        PoolConfig storage poolConfig = poolConfigs[id];
+        PoolConfig memory defaultConfig = defaultPoolConfig;
+        // use default pool config when pool config is empty
         if (poolConfig.DFF_max == 0 || poolConfig.baseLpFee == 0 || poolConfig.alpha == 0) {
-            revert InvalidPoolConfig();
+            poolConfig.alpha = defaultConfig.alpha;
+            poolConfig.DFF_max = defaultConfig.DFF_max;
+            poolConfig.baseLpFee = defaultConfig.baseLpFee;
         }
 
         poolManager.updateDynamicLPFee(key, poolConfig.baseLpFee);
@@ -507,6 +507,27 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
             assembly {
                 sqrtPriceX96 := mload(add(reason, 0x24))
             }
+        }
+    }
+
+    /// @dev Check pool coinfiguration
+    function _checkPoolConfig(PoolConfig memory config) internal pure {
+        if (config.DFF_max >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || config.DFF_max == 0) {
+            revert InvalidDFFMax();
+        }
+
+        if (config.baseLpFee >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || config.baseLpFee == 0) {
+            revert InvalidBaseLpFee();
+        }
+
+        if (config.alpha >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || config.alpha == 0) {
+            revert InvalidAlpha();
+        }
+
+        // baseLpFee should be smaller than max dynamic fee
+        uint256 maxDynamicFee = config.DFF_max * PIF_MAX / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+        if (maxDynamicFee < config.baseLpFee) {
+            revert InvalidBaseLpFee();
         }
     }
 }
