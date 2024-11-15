@@ -207,7 +207,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         PoolKey calldata key,
         ICLPoolManager.SwapParams calldata params,
         bytes calldata hookData
-    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
+    ) external override poolManagerOnly returns (bytes4, BeforeSwapDelta, uint24) {
         if (emergencyFlag) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
@@ -252,7 +252,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         ICLPoolManager.SwapParams calldata,
         BalanceDelta delta,
         bytes calldata
-    ) external override returns (bytes4, int128) {
+    ) external override poolManagerOnly returns (bytes4, int128) {
         // alpha : weight allocated to latest data point
         // weighted_volume : exponentially weighted sum of each volume data point
         // weighted_volume = alpha * latest_volume_token0_amount + (1 - alpha) * previous_weighted_volume
