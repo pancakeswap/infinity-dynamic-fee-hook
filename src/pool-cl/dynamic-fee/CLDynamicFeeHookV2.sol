@@ -145,7 +145,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
 
         PoolId id = key.toId();
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
-        // need to update base lp fee when pool was initialized
+        // sqrtPriceX96 != 0 indicate that pool is initialized, so update base lp fee
         if (sqrtPriceX96 != 0) {
             poolManager.updateDynamicLPFee(key, config.baseLpFee);
         }
@@ -187,9 +187,9 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
 
         PoolId id = key.toId();
         PoolConfig storage poolConfig = poolConfigs[id];
-        PoolConfig memory defaultConfig = defaultPoolConfig;
         // use default pool config when pool config is empty
         if (poolConfig.DFF_max == 0 || poolConfig.baseLpFee == 0 || poolConfig.alpha == 0) {
+            PoolConfig memory defaultConfig = defaultPoolConfig;
             poolConfig.alpha = defaultConfig.alpha;
             poolConfig.DFF_max = defaultConfig.DFF_max;
             poolConfig.baseLpFee = defaultConfig.baseLpFee;
@@ -376,6 +376,18 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
 
     // ========================= Internal Functions ============================
 
+    /**
+     * @notice Calculates the dynamic liquidity provider (LP) fee for a swap based on the price impact factor (PIF).
+     * The function ensures that the fee increases with the price impact, but is capped at a maximum value. It applies an
+     * exponential decay formula to gradually increase the fee as the price impact grows, protecting liquidity providers from
+     * significant price shifts due to large swaps.
+     * @param sqrtPriceX96Before The square root of the price before the swap, expressed as a fixed-point number with 96 bits of precision.
+     * @param sqrtPriceX96After The square root of the price after the swap, expressed as a fixed-point number with 96 bits of precision.
+     * @param baseLpFee The base liquidity provider fee, expressed in hundredths of basis points (bips), which will always be charged.
+     * @param DFF_max The maximum dynamic fee factor, expressed in hundredths of bips, which limits how high the dynamic fee can rise.
+     * @return lpFee The dynamically adjusted liquidity provider fee for the swap, expressed in hundredths of basis points (bips). The
+     *               dynamic fee is added on top of the base LP fee if the calculated fee is greater than the base fee.
+     */
     function _calculateDynamicFee(
         uint160 sqrtPriceX96Before,
         uint160 sqrtPriceX96After,
