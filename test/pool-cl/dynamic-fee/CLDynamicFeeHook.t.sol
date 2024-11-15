@@ -649,6 +649,21 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         assertEq(emergencyFlag, true);
     }
 
+    function test_getDynamicFee_revert_PoolNotInitialized() public {
+        PoolKey memory key_not_initialized = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            hooks: dynamicFeeHook,
+            poolManager: poolManager,
+            fee: DEFAULT_FEE,
+            parameters: CLPoolParametersHelper.setTickSpacing(
+                bytes32(uint256(dynamicFeeHook.getHooksRegistrationBitmap())), 10
+            )
+        });
+        vm.expectRevert(CLDynamicFeeHookV2.PoolNotInitialized.selector);
+        dynamicFeeHook.getDynamicFee(key_not_initialized, 0);
+    }
+
     function executeOneSwap(uint128 amountIn, bool zeroForOne) internal {
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
             ICLRouterBase.CLSwapExactInputSingleParams(key, zeroForOne, amountIn, 0, 0, bytes(""));

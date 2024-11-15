@@ -105,7 +105,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     error InvalidAlpha();
     error SwapAndRevert(uint160 sqrtPriceX96);
     error NotDynamicFeeHook();
-    error PoolAlreadyInitialized();
+    error PoolNotInitialized();
     error InvalidPoolConfig();
 
     // ============================== Modifiers ================================
@@ -339,6 +339,12 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
             return 0;
         }
         PoolId id = key.toId();
+
+        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
+        if (sqrtPriceX96Before == 0) {
+            revert PoolNotInitialized();
+        }
+
         PoolConfig memory poolConfig = poolConfigs[id];
 
         EWVWAPParams memory latestEWVWAPParams = poolEWVWAPParams[id];
@@ -349,7 +355,6 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
             return 0;
         }
 
-        (uint160 sqrtPriceX96Before,,,) = poolManager.getSlot0(id);
         uint256 priceXBefore = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, PRICE_PRECISION);
         uint256 priceXAfter = FullMath.mulDiv(sqrtPriceX96AfterSwap, sqrtPriceX96AfterSwap, PRICE_PRECISION);
         if (
