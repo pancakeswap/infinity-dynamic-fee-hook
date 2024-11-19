@@ -73,6 +73,8 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     // MAX_PRICE = sqrtPriceX96[887272] * sqrtPriceX96[887272] / Q96^2
     uint256 public constant MAX_PRICE = 340256786836388094070642339899681172762;
 
+    uint256 public constant ALPHA_100_PERCENT = 1_000_000;
+
     uint256 private constant MAX_U256 = type(uint256).max;
 
     uint256 private constant DEFAULT_OVERFLOW_FACTOR = 1;
@@ -277,9 +279,8 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // because max volumeToken0Amount is type(int128).max ,so weightedVolume will not be overflow
         // weightedVolume = alpha * volumeToken0Amount + (1 - alpha) * last_weightedVolume
         uint256 weightedVolume = (
-            alpha * volumeToken0Amount
-                + (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) * latestEWVWAPParams.weightedVolume
-        ) / LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+            alpha * volumeToken0Amount + (ALPHA_100_PERCENT - alpha) * latestEWVWAPParams.weightedVolume
+        ) / ALPHA_100_PERCENT;
 
         // will skip the calculation when weightedVolume is 0
         if (weightedVolume == 0) {
@@ -301,20 +302,20 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         uint256 weightedPriceVolumeDelta = FullMath.mulDiv(
             FullMath.mulDiv(volumeToken0Amount, sqrtPriceX96, overflowFactorOne),
             alpha * sqrtPriceX96,
-            FixedPoint96.Q96 * FixedPoint96.Q96 * LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / overflowFactorOne
+            FixedPoint96.Q96 * FixedPoint96.Q96 * ALPHA_100_PERCENT / overflowFactorOne
         );
 
-        // Why not directly use ONE_HUNDRED_PERCENT_FEE ? When vweightedPriceVolume is very small, some precision might be lost.
+        // Why not directly use ALPHA_100_PERCENT ? When vweightedPriceVolume is very small, some precision might be lost.
         uint256 overflowFactorTwo = DEFAULT_OVERFLOW_FACTOR;
-        if (MAX_U256 / (LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha) < latestEWVWAPParams.weightedPriceVolume) {
-            overflowFactorTwo = LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE;
+        if (MAX_U256 / (ALPHA_100_PERCENT - alpha) < latestEWVWAPParams.weightedPriceVolume) {
+            overflowFactorTwo = ALPHA_100_PERCENT;
         }
 
         uint256 weightedPriceVolume = weightedPriceVolumeDelta
             + FullMath.mulDiv(
-                LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE - alpha,
+                ALPHA_100_PERCENT - alpha,
                 latestEWVWAPParams.weightedPriceVolume / overflowFactorTwo,
-                LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / overflowFactorTwo
+                ALPHA_100_PERCENT / overflowFactorTwo
             );
 
         // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
@@ -537,7 +538,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
             revert InvalidBaseLpFee();
         }
 
-        if (config.alpha >= LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE || config.alpha == 0) {
+        if (config.alpha >= ALPHA_100_PERCENT || config.alpha == 0) {
             revert InvalidAlpha();
         }
 
