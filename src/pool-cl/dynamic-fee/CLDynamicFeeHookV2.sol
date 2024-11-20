@@ -177,7 +177,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     }
 
     /// @dev Initialize the dynamic fee pool
-    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata)
+    function afterInitialize(address, PoolKey calldata key, uint160, int24)
         external
         override
         poolManagerOnly

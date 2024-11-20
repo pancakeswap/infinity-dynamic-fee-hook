@@ -12,6 +12,8 @@ import {IVault} from "pancake-v4-core/src/interfaces/IVault.sol";
 import {Vault} from "pancake-v4-core/src/Vault.sol";
 import {PoolId, PoolIdLibrary} from "pancake-v4-core/src/types/PoolId.sol";
 import {IHooks} from "pancake-v4-core/src/interfaces/IHooks.sol";
+import {ICLHooks} from "pancake-v4-core/src/pool-cl/interfaces/ICLHooks.sol";
+import {CustomRevert} from "pancake-v4-core/src/libraries/CustomRevert.sol";
 import {IBinPoolManager} from "pancake-v4-core/src/pool-bin/interfaces/IBinPoolManager.sol";
 import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
 import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
@@ -110,7 +112,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             )
         });
         poolId = key.toId();
-        poolManager.initialize(key, SQRT_RATIO_1_1, ZERO_BYTES);
+        poolManager.initialize(key, SQRT_RATIO_1_1);
 
         // mint position , tokenId is 1
         planner = Planner.init().add(
@@ -278,14 +280,17 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
                 bytes32(uint256(dynamicFeeHook.getHooksRegistrationBitmap())), 10
             )
         });
+
         vm.expectRevert(
             abi.encodeWithSelector(
-                Hooks.Wrap__FailedHookCall.selector,
+                CustomRevert.WrappedError.selector,
                 address(dynamicFeeHook1),
-                abi.encodeWithSelector(CLDynamicFeeHookV2.NotDynamicFeePool.selector)
+                ICLHooks.afterInitialize.selector,
+                abi.encodeWithSelector(CLDynamicFeeHookV2.NotDynamicFeePool.selector),
+                abi.encodeWithSelector(Hooks.HookCallFailed.selector)
             )
         );
-        poolManager.initialize(key_not_dynamic, SQRT_RATIO_1_1, ZERO_BYTES);
+        poolManager.initialize(key_not_dynamic, SQRT_RATIO_1_1);
     }
 
     function test_first_swap_no_dynamic_fee() external {
@@ -300,7 +305,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         }
 
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
-            ICLRouterBase.CLSwapExactInputSingleParams(key, true, 1 ether, 0, 0, bytes(""));
+            ICLRouterBase.CLSwapExactInputSingleParams(key, true, 1 ether, 0, bytes(""));
 
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
@@ -349,7 +354,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         executeOneSwap(1 ether, true);
 
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
-            ICLRouterBase.CLSwapExactInputSingleParams(key, is_zeroForOne, swap_amount, 0, 0, bytes(""));
+            ICLRouterBase.CLSwapExactInputSingleParams(key, is_zeroForOne, swap_amount, 0, bytes(""));
 
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         Currency currencyIn = is_zeroForOne ? key.currency0 : key.currency1;
@@ -381,7 +386,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
 
         uint128 swap_amount = 155 ether;
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
-            ICLRouterBase.CLSwapExactInputSingleParams(key, true, swap_amount, 0, 0, bytes(""));
+            ICLRouterBase.CLSwapExactInputSingleParams(key, true, swap_amount, 0, bytes(""));
 
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
@@ -463,7 +468,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
 
         uint128 swap_amount = 155 ether;
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
-            ICLRouterBase.CLSwapExactInputSingleParams(key, false, swap_amount, 0, 0, bytes(""));
+            ICLRouterBase.CLSwapExactInputSingleParams(key, false, swap_amount, 0, bytes(""));
 
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(key.currency1, key.currency0, ActionConstants.MSG_SENDER);
@@ -539,7 +544,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
 
         uint128 swap_amount = 100 ether;
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
-            ICLRouterBase.CLSwapExactInputSingleParams(key, true, swap_amount, 0, 0, bytes(""));
+            ICLRouterBase.CLSwapExactInputSingleParams(key, true, swap_amount, 0, bytes(""));
 
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(key.currency0, key.currency1, ActionConstants.MSG_SENDER);
@@ -666,7 +671,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
 
     function executeOneSwap(uint128 amountIn, bool zeroForOne) internal {
         ICLRouterBase.CLSwapExactInputSingleParams memory params =
-            ICLRouterBase.CLSwapExactInputSingleParams(key, zeroForOne, amountIn, 0, 0, bytes(""));
+            ICLRouterBase.CLSwapExactInputSingleParams(key, zeroForOne, amountIn, 0, bytes(""));
 
         planner = Planner.init().add(Actions.CL_SWAP_EXACT_IN_SINGLE, abi.encode(params));
         bytes memory data = planner.finalizeSwap(
