@@ -1,0 +1,9 @@
+{
+    "create3Factory": "0x38Ab3f2CE00973A51d3A2A04d634C9bcbf20e4e1",
+    "owner": "0x42571B8414c68B63A2729146CE93F23639d25399",
+    "clPoolManager": "0x70890E308DCE727180ac1B9550928fED342dea52",
+    "clDynamicFeeHook": "0x01973A14da0ec6254ada7dD3fAC75ADB65064dc0",
+    "clDynamicFeeHook_alpha": 500000,
+    "clDynamicFeeHook_dff_max": 250000,
+    "clDynamicFeeHook_baseLpFee": 3000
+}
