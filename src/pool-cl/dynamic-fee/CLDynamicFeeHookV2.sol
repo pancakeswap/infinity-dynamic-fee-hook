@@ -312,18 +312,8 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
             Q96_SQUARED * ALPHA_100_PERCENT / overflowFactorOne
         );
 
-        // Why not directly use ALPHA_100_PERCENT ? When vweightedPriceVolume is very small, some precision might be lost.
-        uint256 overflowFactorTwo = DEFAULT_OVERFLOW_FACTOR;
-        if (MAX_U256 / lastWVAlpha < latestEWVWAPParams.weightedPriceVolume) {
-            overflowFactorTwo = ALPHA_100_PERCENT;
-        }
-
         uint256 weightedPriceVolume = weightedPriceVolumeDelta
-            + FullMath.mulDiv(
-                lastWVAlpha,
-                latestEWVWAPParams.weightedPriceVolume / overflowFactorTwo,
-                ALPHA_100_PERCENT / overflowFactorTwo
-            );
+            + FullMath.mulDiv(lastWVAlpha, latestEWVWAPParams.weightedPriceVolume, ALPHA_100_PERCENT);
 
         // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
         // ewVWAPX =  ewVWAP * VWAPX_A
