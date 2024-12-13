@@ -73,6 +73,9 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     // MAX_PRICE = sqrtPriceX96[887272] * sqrtPriceX96[887272] / Q96^2
     uint256 public constant MAX_PRICE = 340256786836388094070642339899681172762;
 
+    // MAX_EWVWAPX = MAX_PRICE * VWAPX_A
+    uint256 public constant MAX_EWVWAPX = 115774680941395604863474304587699109859826404561446891284072445734786774426078;
+
     uint256 public constant ALPHA_100_PERCENT = 1_000_000;
 
     uint256 private constant MAX_U256 = type(uint256).max;
@@ -80,6 +83,9 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
     uint256 private constant DEFAULT_OVERFLOW_FACTOR = 1;
 
     uint256 private constant OVERFLOW_FACTOR = 10 ** 10;
+
+    // Q96_SQUARED = FixedPoint96.Q96 * FixedPoint96.Q96
+    uint256 private constant Q96_SQUARED = 6277101735386680763835789423207666416102355444464034512896;
 
     // 0.2 * ONE_HUNDRED_PERCENT_FEE
     uint256 private constant PIF_MAX = 200_000;
@@ -215,7 +221,6 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         }
 
         PoolId id = key.toId();
-        PoolConfig memory poolConfig = poolConfigs[id];
 
         EWVWAPParams memory latestEWVWAPParams = poolEWVWAPParams[id];
         uint256 latestEWVWAPX = latestEWVWAPParams.ewVWAPX;
@@ -230,8 +235,8 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         uint256 priceXBefore = FullMath.mulDiv(sqrtPriceX96Before, sqrtPriceX96Before, PRICE_PRECISION);
 
         // Only charge dynamic fee when price_after_swap and ewVWAP are not on the same side compared to price_before_swap
-        // when zeroForOne is true, priceXAfter is smaller than priceXBefore, so we can skip the calculation when ewVWAPX is smaller than priceXBefore
-        // when zeroForOne is false, priceXAfter is bigger than priceXBefore, so we can skip the calculation when ewVWAPX is bigger than priceXBefore
+        // when zeroForOne is true, priceXAfter is smaller than priceXBefore, so we can skip the calculation when ewVWAPX is less than or equal to priceXBefore
+        // when zeroForOne is false, priceXAfter is bigger than priceXBefore, so we can skip the calculation when ewVWAPX is greater than or equal to priceXBefore
         //  we can skip simualtion, will save some gas
         if (params.zeroForOne && latestEWVWAPX <= priceXBefore || !params.zeroForOne && latestEWVWAPX >= priceXBefore) {
             return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
@@ -239,6 +244,7 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         // get the sqrt price after the swap by simulating the swap
         // NOTICE: The swap simulation uses the base LP fee, so the simulated price may differ from the actual swap price, which uses a dynamic fee.
         uint160 sqrtPriceX96After = _simulateSwap(key, params, hookData);
+        PoolConfig memory poolConfig = poolConfigs[id];
         uint24 lpFee =
             _calculateDynamicFee(sqrtPriceX96Before, sqrtPriceX96After, poolConfig.baseLpFee, poolConfig.DFF_max);
         if (lpFee == 0) {
@@ -275,12 +281,13 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         uint256 alpha = poolConfigs[id].alpha;
 
         EWVWAPParams storage latestEWVWAPParams = poolEWVWAPParams[id];
+        // last weightedVolume calculation alpha factor
+        uint256 lastWVAlpha = ALPHA_100_PERCENT - alpha;
         // TODO: check oveflow cases about weightedVolume and weightedPriceVolume
         // because max volumeToken0Amount is type(int128).max ,so weightedVolume will not be overflow
         // weightedVolume = alpha * volumeToken0Amount + (1 - alpha) * last_weightedVolume
-        uint256 weightedVolume = (
-            alpha * volumeToken0Amount + (ALPHA_100_PERCENT - alpha) * latestEWVWAPParams.weightedVolume
-        ) / ALPHA_100_PERCENT;
+        uint256 weightedVolume =
+            (alpha * volumeToken0Amount + lastWVAlpha * latestEWVWAPParams.weightedVolume) / ALPHA_100_PERCENT;
 
         // will skip the calculation when weightedVolume is 0
         if (weightedVolume == 0) {
@@ -302,27 +309,17 @@ contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
         uint256 weightedPriceVolumeDelta = FullMath.mulDiv(
             FullMath.mulDiv(volumeToken0Amount, sqrtPriceX96, overflowFactorOne),
             alpha * sqrtPriceX96,
-            FixedPoint96.Q96 * FixedPoint96.Q96 * ALPHA_100_PERCENT / overflowFactorOne
+            Q96_SQUARED * ALPHA_100_PERCENT / overflowFactorOne
         );
 
-        // Why not directly use ALPHA_100_PERCENT ? When vweightedPriceVolume is very small, some precision might be lost.
-        uint256 overflowFactorTwo = DEFAULT_OVERFLOW_FACTOR;
-        if (MAX_U256 / (ALPHA_100_PERCENT - alpha) < latestEWVWAPParams.weightedPriceVolume) {
-            overflowFactorTwo = ALPHA_100_PERCENT;
-        }
-
         uint256 weightedPriceVolume = weightedPriceVolumeDelta
-            + FullMath.mulDiv(
-                ALPHA_100_PERCENT - alpha,
-                latestEWVWAPParams.weightedPriceVolume / overflowFactorTwo,
-                ALPHA_100_PERCENT / overflowFactorTwo
-            );
+            + FullMath.mulDiv(lastWVAlpha, latestEWVWAPParams.weightedPriceVolume, ALPHA_100_PERCENT);
 
         // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
         // ewVWAPX =  ewVWAP * VWAPX_A
-        // if weightedPriceVolume / weightedVolume is greater than MAX_PRICE, we will set ewVWAPX as MAX_PRICE * VWAPX_A
+        // if weightedPriceVolume / weightedVolume is greater than MAX_PRICE, we will set ewVWAPX as MAX_EWVWAPX(MAX_PRICE * VWAPX_A)
         if (weightedPriceVolume / MAX_PRICE > weightedVolume) {
-            latestEWVWAPParams.ewVWAPX = MAX_PRICE * VWAPX_A;
+            latestEWVWAPParams.ewVWAPX = MAX_EWVWAPX;
         } else {
             latestEWVWAPParams.ewVWAPX = FullMath.mulDiv(weightedPriceVolume, VWAPX_A, weightedVolume);
         }
