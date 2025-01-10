@@ -3,22 +3,22 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Script.sol";
 import {BaseScript} from "./BaseScript.sol";
-import {CLDynamicFeeHookV2} from "../src/pool-cl/dynamic-fee/CLDynamicFeeHookV2.sol";
+import {CLDynamicFeeHook} from "../src/pool-cl/dynamic-fee/CLDynamicFeeHook.sol";
 import {Create3Factory} from "pancake-create3-factory/src/Create3Factory.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 /**
  * Step 1: Deploy
- * forge script script/01_DeployCLDynamicFeeHook.s.sol:DeployCLDynamicFeeHookV2Script -vvv \
+ * forge script script/01_DeployCLDynamicFeeHook.s.sol:DeployCLDynamicFeeHookScript -vvv \
  *     --rpc-url $RPC_URL \
  *     --broadcast \
  *     --slow
  *
  * Do not verify this contract as we do not want to open-source this yet.
  */
-contract DeployCLDynamicFeeHookV2Script is BaseScript {
+contract DeployCLDynamicFeeHookScript is BaseScript {
     function getDeploymentSalt() public pure override returns (bytes32) {
-        return keccak256("PANCAKE-V4-DYNAMIC-FEE-HOOK/CLDynamicFeeHookV2/xx");
+        return keccak256("PANCAKE-V4-DYNAMIC-FEE-HOOK/CLDynamicFeeHook/xx");
     }
 
     struct PoolConfig {
@@ -53,13 +53,13 @@ contract DeployCLDynamicFeeHookV2Script is BaseScript {
             abi.encodeWithSelector(Ownable.transferOwnership.selector, getAddressFromConfig("owner"));
 
         bytes memory creationCode =
-            abi.encodePacked(type(CLDynamicFeeHookV2).creationCode, abi.encode(clPoolManager, poolConfig));
+            abi.encodePacked(type(CLDynamicFeeHook).creationCode, abi.encode(clPoolManager, poolConfig));
 
-        address clDynamicFeeHookV2 = factory.deploy(
+        address CLDynamicFeeHook = factory.deploy(
             getDeploymentSalt(), creationCode, keccak256(creationCode), 0, afterDeploymentExecutionPayload, 0
         );
 
-        console.log("clDynamicFeeHookV2 contract deployed at ", clDynamicFeeHookV2);
+        console.log("CLDynamicFeeHook contract deployed at ", CLDynamicFeeHook);
 
         vm.stopBroadcast();
     }
