@@ -19,14 +19,14 @@ import {
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 /**
- * CLDynamicFeeHookV2 use ewVWAP to determine whether will charge the dynamic fee
+ * CLDynamicFeeHook use ewVWAP to determine whether will charge the dynamic fee
  * weighted_volume = alpha * volume_token0_amount + (1 - alpha) * previous_weighted_volume
  * weighted_price_volume = alpha * volume_token0_amount * price + (1 - alpha) * previous_weighted_price_volume
  * ewVWAP = weighted_price_volume / weighted_volume
  * if v4 pool price move in the same direction as ewVWAP, we will not charge dynamic fee
  * if v4 pool price move in the opposite direction as ewVWAP, we will charge dynamic fee
  */
-contract CLDynamicFeeHookV2 is CLBaseHook, Ownable {
+contract CLDynamicFeeHook is CLBaseHook, Ownable {
     using PoolIdLibrary for PoolKey;
     using LPFeeLibrary for uint24;
 

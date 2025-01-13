@@ -33,7 +33,7 @@ import {CLPoolParametersHelper} from "pancake-v4-core/src/pool-cl/libraries/CLPo
 import {PosmTestSetup} from "pancake-v4-periphery/test/pool-cl/shared/PosmTestSetup.sol";
 import {CLLiquidityOperations} from "pancake-v4-periphery/test/pool-cl/shared/CLLiquidityOperations.sol";
 import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
-import {CLDynamicFeeHookV2} from "../../../src/pool-cl/dynamic-fee/CLDynamicFeeHookV2.sol";
+import {CLDynamicFeeHook} from "../../../src/pool-cl/dynamic-fee/CLDynamicFeeHook.sol";
 
 contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     using Planner for Plan;
@@ -41,8 +41,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
 
     uint256 public PRICE_PRECISION = 18448130884583730000;
 
-    CLDynamicFeeHookV2 dynamicFeeHook;
-    CLDynamicFeeHookV2 dynamicFeeHook1;
+    CLDynamicFeeHook dynamicFeeHook;
+    CLDynamicFeeHook dynamicFeeHook1;
 
     IVault public vault;
     ICLPoolManager public poolManager;
@@ -83,12 +83,12 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         (currency0, currency1) = deployCurrencies(10 ** 30);
         (vault, poolManager) = createFreshManager();
 
-        CLDynamicFeeHookV2.PoolConfig memory poolConfig =
-            CLDynamicFeeHookV2.PoolConfig({alpha: DEFAULT_Alpha, DFF_max: MAX_DFF, baseLpFee: DEFAULT_FEE});
+        CLDynamicFeeHook.PoolConfig memory poolConfig =
+            CLDynamicFeeHook.PoolConfig({alpha: DEFAULT_Alpha, DFF_max: MAX_DFF, baseLpFee: DEFAULT_FEE});
 
-        dynamicFeeHook = new CLDynamicFeeHookV2(ICLPoolManager(address(poolManager)), poolConfig);
+        dynamicFeeHook = new CLDynamicFeeHook(ICLPoolManager(address(poolManager)), poolConfig);
 
-        dynamicFeeHook1 = new CLDynamicFeeHookV2(ICLPoolManager(address(poolManager)), poolConfig);
+        dynamicFeeHook1 = new CLDynamicFeeHook(ICLPoolManager(address(poolManager)), poolConfig);
 
         deployAndApprovePosm(vault, poolManager);
 
@@ -199,7 +199,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     function test_simulate_swap_not_from_hooks_revert() public {
         ICLPoolManager.SwapParams memory params =
             ICLPoolManager.SwapParams({zeroForOne: true, amountSpecified: 0, sqrtPriceLimitX96: 0});
-        vm.expectRevert(CLDynamicFeeHookV2.NotDynamicFeeHook.selector);
+        vm.expectRevert(CLDynamicFeeHook.NotDynamicFeeHook.selector);
         dynamicFeeHook.simulateSwap(key, params, ZERO_BYTES);
     }
 
@@ -214,54 +214,54 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
                 bytes32(uint256(dynamicFeeHook.getHooksRegistrationBitmap())), 10
             )
         });
-        CLDynamicFeeHookV2.PoolConfig memory poolConfig =
-            CLDynamicFeeHookV2.PoolConfig({alpha: DEFAULT_Alpha, DFF_max: MAX_DFF, baseLpFee: DEFAULT_FEE});
-        vm.expectRevert(CLDynamicFeeHookV2.NotDynamicFeePool.selector);
+        CLDynamicFeeHook.PoolConfig memory poolConfig =
+            CLDynamicFeeHook.PoolConfig({alpha: DEFAULT_Alpha, DFF_max: MAX_DFF, baseLpFee: DEFAULT_FEE});
+        vm.expectRevert(CLDynamicFeeHook.NotDynamicFeePool.selector);
         dynamicFeeHook.updatePoolConfig(key_not_dynamic, poolConfig);
     }
 
     function test_updatePoolConfig_revert_InvalidDFFMax() public {
-        CLDynamicFeeHookV2.PoolConfig memory poolConfig = CLDynamicFeeHookV2.PoolConfig({
+        CLDynamicFeeHook.PoolConfig memory poolConfig = CLDynamicFeeHook.PoolConfig({
             alpha: DEFAULT_Alpha,
             DFF_max: LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE,
             baseLpFee: DEFAULT_FEE
         });
-        vm.expectRevert(CLDynamicFeeHookV2.InvalidDFFMax.selector);
+        vm.expectRevert(CLDynamicFeeHook.InvalidDFFMax.selector);
         dynamicFeeHook1.updatePoolConfig(key1, poolConfig);
     }
 
     function test_updatePoolConfig_revert_InvalidBaseLpFee() public {
-        CLDynamicFeeHookV2.PoolConfig memory poolConfig = CLDynamicFeeHookV2.PoolConfig({
+        CLDynamicFeeHook.PoolConfig memory poolConfig = CLDynamicFeeHook.PoolConfig({
             alpha: DEFAULT_Alpha,
             DFF_max: MAX_DFF,
             baseLpFee: LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE
         });
-        vm.expectRevert(CLDynamicFeeHookV2.InvalidBaseLpFee.selector);
+        vm.expectRevert(CLDynamicFeeHook.InvalidBaseLpFee.selector);
         dynamicFeeHook1.updatePoolConfig(key1, poolConfig);
     }
 
     function test_updatePoolConfig_revert_BaseLpFee_larger_than_DFF() public {
-        CLDynamicFeeHookV2.PoolConfig memory poolConfig =
-            CLDynamicFeeHookV2.PoolConfig({alpha: DEFAULT_Alpha, DFF_max: MAX_DFF, baseLpFee: (MAX_DFF / 5 + 1)});
-        vm.expectRevert(CLDynamicFeeHookV2.InvalidBaseLpFee.selector);
+        CLDynamicFeeHook.PoolConfig memory poolConfig =
+            CLDynamicFeeHook.PoolConfig({alpha: DEFAULT_Alpha, DFF_max: MAX_DFF, baseLpFee: (MAX_DFF / 5 + 1)});
+        vm.expectRevert(CLDynamicFeeHook.InvalidBaseLpFee.selector);
         dynamicFeeHook1.updatePoolConfig(key1, poolConfig);
     }
 
     function test_updatePoolConfig_revert_InvalidAlpha() public {
-        CLDynamicFeeHookV2.PoolConfig memory poolConfig = CLDynamicFeeHookV2.PoolConfig({
+        CLDynamicFeeHook.PoolConfig memory poolConfig = CLDynamicFeeHook.PoolConfig({
             alpha: LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE,
             DFF_max: MAX_DFF,
             baseLpFee: DEFAULT_FEE
         });
-        vm.expectRevert(CLDynamicFeeHookV2.InvalidAlpha.selector);
+        vm.expectRevert(CLDynamicFeeHook.InvalidAlpha.selector);
         dynamicFeeHook1.updatePoolConfig(key1, poolConfig);
     }
 
     function test_updatePoolConfig_success() public {
-        CLDynamicFeeHookV2.PoolConfig memory poolConfig =
-            CLDynamicFeeHookV2.PoolConfig({alpha: DEFAULT_Alpha, DFF_max: MAX_DFF, baseLpFee: DEFAULT_FEE});
+        CLDynamicFeeHook.PoolConfig memory poolConfig =
+            CLDynamicFeeHook.PoolConfig({alpha: DEFAULT_Alpha, DFF_max: MAX_DFF, baseLpFee: DEFAULT_FEE});
         vm.expectEmit(true, true, true, true);
-        emit CLDynamicFeeHookV2.UpdatePoolConfig(poolId1, DEFAULT_Alpha, MAX_DFF, DEFAULT_FEE);
+        emit CLDynamicFeeHook.UpdatePoolConfig(poolId1, DEFAULT_Alpha, MAX_DFF, DEFAULT_FEE);
         dynamicFeeHook1.updatePoolConfig(key1, poolConfig);
         (uint24 alpha, uint24 hook_DFF_max, uint24 baseLpFee) = dynamicFeeHook1.poolConfigs(poolId1);
         assertEq(alpha, DEFAULT_Alpha);
@@ -286,7 +286,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
                 CustomRevert.WrappedError.selector,
                 address(dynamicFeeHook1),
                 ICLHooks.afterInitialize.selector,
-                abi.encodeWithSelector(CLDynamicFeeHookV2.NotDynamicFeePool.selector),
+                abi.encodeWithSelector(CLDynamicFeeHook.NotDynamicFeePool.selector),
                 abi.encodeWithSelector(Hooks.HookCallFailed.selector)
             )
         );
@@ -611,10 +611,10 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         uint24 newLPFee = DEFAULT_FEE + 1000;
         uint24 newAlpha = DEFAULT_Alpha + 1000;
         uint24 newDFF = MAX_DFF + 1000;
-        CLDynamicFeeHookV2.PoolConfig memory poolConfig =
-            CLDynamicFeeHookV2.PoolConfig({alpha: newAlpha, DFF_max: newDFF, baseLpFee: newLPFee});
+        CLDynamicFeeHook.PoolConfig memory poolConfig =
+            CLDynamicFeeHook.PoolConfig({alpha: newAlpha, DFF_max: newDFF, baseLpFee: newLPFee});
         vm.expectEmit(true, true, true, true);
-        emit CLDynamicFeeHookV2.UpdatePoolConfig(poolId, newAlpha, newDFF, newLPFee);
+        emit CLDynamicFeeHook.UpdatePoolConfig(poolId, newAlpha, newDFF, newLPFee);
         dynamicFeeHook.updatePoolConfig(key, poolConfig);
         (uint24 alpha, uint24 hook_DFF_max, uint24 baseLpFee) = dynamicFeeHook.poolConfigs(poolId);
         assertEq(alpha, newAlpha);
@@ -633,10 +633,10 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         uint24 newLPFee = DEFAULT_FEE + 1000;
         uint24 newAlpha = DEFAULT_Alpha + 1000;
         uint24 newDFF = MAX_DFF + 1000;
-        CLDynamicFeeHookV2.PoolConfig memory poolConfig =
-            CLDynamicFeeHookV2.PoolConfig({alpha: newAlpha, DFF_max: newDFF, baseLpFee: newLPFee});
+        CLDynamicFeeHook.PoolConfig memory poolConfig =
+            CLDynamicFeeHook.PoolConfig({alpha: newAlpha, DFF_max: newDFF, baseLpFee: newLPFee});
         vm.expectEmit(true, true, true, true);
-        emit CLDynamicFeeHookV2.UpdateDefaultPoolConfig(newAlpha, newDFF, newLPFee);
+        emit CLDynamicFeeHook.UpdateDefaultPoolConfig(newAlpha, newDFF, newLPFee);
         dynamicFeeHook.updateDefaultPoolConfig(poolConfig);
         (uint24 alpha, uint24 hook_DFF_max, uint24 baseLpFee) = dynamicFeeHook.defaultPoolConfig();
         assertEq(alpha, newAlpha);
@@ -648,7 +648,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         bool emergencyFlag = dynamicFeeHook.emergencyFlag();
         assertEq(emergencyFlag, false);
         vm.expectEmit(true, true, true, true);
-        emit CLDynamicFeeHookV2.UpdateEmergencyFlag(true);
+        emit CLDynamicFeeHook.UpdateEmergencyFlag(true);
         dynamicFeeHook.setEmergencyFlag(true);
         emergencyFlag = dynamicFeeHook.emergencyFlag();
         assertEq(emergencyFlag, true);
@@ -665,7 +665,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
                 bytes32(uint256(dynamicFeeHook.getHooksRegistrationBitmap())), 10
             )
         });
-        vm.expectRevert(CLDynamicFeeHookV2.PoolNotInitialized.selector);
+        vm.expectRevert(CLDynamicFeeHook.PoolNotInitialized.selector);
         dynamicFeeHook.getDynamicFee(key_not_initialized, 0);
     }
 
