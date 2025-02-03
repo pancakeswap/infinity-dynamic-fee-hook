@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {CLBaseHook} from "pancake-v4-hooks/src/pool-cl//CLBaseHook.sol";
-import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
-import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.sol";
-import {LPFeeLibrary} from "pancake-v4-core/src/libraries/LPFeeLibrary.sol";
-import {PoolKey} from "pancake-v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "pancake-v4-core/src/types/PoolId.sol";
-import {BalanceDelta, BalanceDeltaLibrary} from "pancake-v4-core/src/types/BalanceDelta.sol";
-import {Currency} from "pancake-v4-core/src/types/Currency.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "pancake-v4-core/src/types/BeforeSwapDelta.sol";
-import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
-import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
+import {CLBaseHook} from "infinity-hooks/src/pool-cl//CLBaseHook.sol";
+import {FullMath} from "infinity-core/src/pool-cl/libraries/FullMath.sol";
+import {FixedPoint96} from "infinity-core/src/pool-cl/libraries/FixedPoint96.sol";
+import {LPFeeLibrary} from "infinity-core/src/libraries/LPFeeLibrary.sol";
+import {PoolKey} from "infinity-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "infinity-core/src/types/PoolId.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "infinity-core/src/types/BalanceDelta.sol";
+import {Currency} from "infinity-core/src/types/Currency.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "infinity-core/src/types/BeforeSwapDelta.sol";
+import {ICLPoolManager} from "infinity-core/src/pool-cl/interfaces/ICLPoolManager.sol";
+import {CLPoolManager} from "infinity-core/src/pool-cl/CLPoolManager.sol";
 
 contract CLDynamicFeeHookTest is CLBaseHook {
     constructor(ICLPoolManager poolManager) CLBaseHook(poolManager) {}

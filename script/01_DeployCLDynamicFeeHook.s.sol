@@ -18,7 +18,7 @@ import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
  */
 contract DeployCLDynamicFeeHookScript is BaseScript {
     function getDeploymentSalt() public pure override returns (bytes32) {
-        return keccak256("PANCAKE-V4-DYNAMIC-FEE-HOOK/CLDynamicFeeHook/xx");
+        return keccak256("INFINITY-DYNAMIC-FEE-HOOK/CLDynamicFeeHook/xx");
     }
 
     struct PoolConfig {
