@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {CLBaseHook} from "pancake-v4-hooks/src/pool-cl//CLBaseHook.sol";
-import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
-import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.sol";
-import {LPFeeLibrary} from "pancake-v4-core/src/libraries/LPFeeLibrary.sol";
-import {PoolKey} from "pancake-v4-core/src/types/PoolKey.sol";
-import {IHooks} from "pancake-v4-core/src/interfaces/IHooks.sol";
-import {PoolId, PoolIdLibrary} from "pancake-v4-core/src/types/PoolId.sol";
-import {BalanceDelta, BalanceDeltaLibrary} from "pancake-v4-core/src/types/BalanceDelta.sol";
-import {Currency} from "pancake-v4-core/src/types/Currency.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "pancake-v4-core/src/types/BeforeSwapDelta.sol";
-import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
-import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
+import {CLBaseHook} from "infinity-hooks/src/pool-cl//CLBaseHook.sol";
+import {FullMath} from "infinity-core/src/pool-cl/libraries/FullMath.sol";
+import {FixedPoint96} from "infinity-core/src/pool-cl/libraries/FixedPoint96.sol";
+import {LPFeeLibrary} from "infinity-core/src/libraries/LPFeeLibrary.sol";
+import {PoolKey} from "infinity-core/src/types/PoolKey.sol";
+import {IHooks} from "infinity-core/src/interfaces/IHooks.sol";
+import {PoolId, PoolIdLibrary} from "infinity-core/src/types/PoolId.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "infinity-core/src/types/BalanceDelta.sol";
+import {Currency} from "infinity-core/src/types/Currency.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "infinity-core/src/types/BeforeSwapDelta.sol";
+import {ICLPoolManager} from "infinity-core/src/pool-cl/interfaces/ICLPoolManager.sol";
+import {CLPoolManager} from "infinity-core/src/pool-cl/CLPoolManager.sol";
 import {
     SD59x18, uUNIT, UNIT, convert, inv, exp, lt, gt, uEXP_MIN_THRESHOLD, EXP_MAX_INPUT
 } from "prb-math/SD59x18.sol";
@@ -23,8 +23,8 @@ import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
  * weighted_volume = alpha * volume_token0_amount + (1 - alpha) * previous_weighted_volume
  * weighted_price_volume = alpha * volume_token0_amount * price + (1 - alpha) * previous_weighted_price_volume
  * ewVWAP = weighted_price_volume / weighted_volume
- * if v4 pool price move in the same direction as ewVWAP, we will not charge dynamic fee
- * if v4 pool price move in the opposite direction as ewVWAP, we will charge dynamic fee
+ * if infinity pool price move in the same direction as ewVWAP, we will not charge dynamic fee
+ * if infinity pool price move in the opposite direction as ewVWAP, we will charge dynamic fee
  */
 contract CLDynamicFeeHook is CLBaseHook, Ownable {
     using PoolIdLibrary for PoolKey;
@@ -51,7 +51,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
 
     // ============================== Variables ================================
 
-    // V4 tick range is between -887272 and 887272
+    // CL tick range is between -887272 and 887272
     // sqrtPriceX96[-887272] is 4295128739
     // sqrtPriceX96[887272] is 1461446703485210103287273052203988822378723970342
     // So use sqrtPriceX96[-887272] * sqrtPriceX96[-887272] as precision
@@ -59,12 +59,12 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
     // priceX = sqrtPriceX96 * sqrtPriceX96 / PRICE_PRECISION
     // priceX[-887272] = sqrtPriceX96[-887272] * sqrtPriceX96[-887272] / PRICE_PRECISION = 1
     // priceX[887272] = sqrtPriceX96[887272] * sqrtPriceX96[887272] / PRICE_PRECISION = 115774680941395604863474304587699109860222437082614414580284557381589562228688 , which is smaller than type(uint256).max
-    // then we can check whole v4 pool price range using ewVWAPX
+    // then we can check whole infinity pool price range using ewVWAPX
     uint256 public constant PRICE_PRECISION = 18448130884583730000;
 
-    // v4_pool_price = (sqrtPriceX96 / Q96) * (sqrtPriceX96 / Q96)
+    // infinity_pool_price = (sqrtPriceX96 / Q96) * (sqrtPriceX96 / Q96)
     // priceX = sqrtPriceX96 * sqrtPriceX96 / PRICE_PRECISION
-    // priceX = v4_pool_price * (Q96 * Q96 / PRICE_PRECISION)
+    // priceX = infinity_pool_price * (Q96 * Q96 / PRICE_PRECISION)
     // ewVWAPX = ewVWAP * (Q96 * Q96 / PRICE_PRECISION)
     // VWAPX_A = Q96 * Q96 / PRICE_PRECISION
     // A menas amplification factor
@@ -303,7 +303,7 @@ contract CLDynamicFeeHook is CLBaseHook, Ownable {
             overflowFactorOne = OVERFLOW_FACTOR;
         }
 
-        // weightedPriceVolume = alpha * volumeToken0Amount * v4_price + (1 - alpha) * last_weightedPriceVolume
+        // weightedPriceVolume = alpha * volumeToken0Amount * infinity_price + (1 - alpha) * last_weightedPriceVolume
         // weightedPriceVolume = alpha * volumeToken0Amount * sqrtPriceX96 * sqrtPriceX96 / (Q96 * Q96) + (1 - alpha) * last_weightedPriceVolume
         // weightedPriceVolumeDelta = alpha * volumeToken0Amount * sqrtPriceX96 * sqrtPriceX96 / (Q96 * Q96)
         uint256 weightedPriceVolumeDelta = FullMath.mulDiv(

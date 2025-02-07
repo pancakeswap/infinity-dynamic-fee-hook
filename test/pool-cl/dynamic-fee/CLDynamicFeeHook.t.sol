@@ -2,40 +2,39 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {GasSnapshot} from "forge-gas-snapshot/GasSnapshot.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
-import {Currency, CurrencyLibrary} from "pancake-v4-core/src/types/Currency.sol";
-import {PoolKey} from "pancake-v4-core/src/types/PoolKey.sol";
-import {FixedPoint96} from "pancake-v4-core/src/pool-cl/libraries/FixedPoint96.sol";
-import {IVault} from "pancake-v4-core/src/interfaces/IVault.sol";
-import {Vault} from "pancake-v4-core/src/Vault.sol";
-import {PoolId, PoolIdLibrary} from "pancake-v4-core/src/types/PoolId.sol";
-import {IHooks} from "pancake-v4-core/src/interfaces/IHooks.sol";
-import {ICLHooks} from "pancake-v4-core/src/pool-cl/interfaces/ICLHooks.sol";
-import {CustomRevert} from "pancake-v4-core/src/libraries/CustomRevert.sol";
-import {IBinPoolManager} from "pancake-v4-core/src/pool-bin/interfaces/IBinPoolManager.sol";
-import {ICLPoolManager} from "pancake-v4-core/src/pool-cl/interfaces/ICLPoolManager.sol";
-import {CLPoolManager} from "pancake-v4-core/src/pool-cl/CLPoolManager.sol";
-import {CLPoolManagerRouter} from "pancake-v4-core/test/pool-cl/helpers/CLPoolManagerRouter.sol";
-import {Hooks} from "pancake-v4-core/src/libraries/Hooks.sol";
-import {IBinPoolManager} from "pancake-v4-core/src/pool-bin/interfaces/IBinPoolManager.sol";
-import {TokenFixture} from "pancake-v4-periphery/test/helpers/TokenFixture.sol";
-import {MockV4Router} from "pancake-v4-periphery/test/mocks/MockV4Router.sol";
-import {IV4Router} from "pancake-v4-periphery/src/interfaces/IV4Router.sol";
-import {ICLRouterBase} from "pancake-v4-periphery/src/pool-cl/interfaces/ICLRouterBase.sol";
-import {PathKey} from "pancake-v4-periphery/src/libraries/PathKey.sol";
-import {Plan, Planner} from "pancake-v4-periphery/src/libraries/Planner.sol";
-import {Actions} from "pancake-v4-periphery/src/libraries/Actions.sol";
-import {ActionConstants} from "pancake-v4-periphery/src/libraries/ActionConstants.sol";
-import {LPFeeLibrary} from "pancake-v4-core/src/libraries/LPFeeLibrary.sol";
-import {CLPoolParametersHelper} from "pancake-v4-core/src/pool-cl/libraries/CLPoolParametersHelper.sol";
-import {PosmTestSetup} from "pancake-v4-periphery/test/pool-cl/shared/PosmTestSetup.sol";
-import {CLLiquidityOperations} from "pancake-v4-periphery/test/pool-cl/shared/CLLiquidityOperations.sol";
-import {FullMath} from "pancake-v4-core/src/pool-cl/libraries/FullMath.sol";
+import {Currency, CurrencyLibrary} from "infinity-core/src/types/Currency.sol";
+import {PoolKey} from "infinity-core/src/types/PoolKey.sol";
+import {FixedPoint96} from "infinity-core/src/pool-cl/libraries/FixedPoint96.sol";
+import {IVault} from "infinity-core/src/interfaces/IVault.sol";
+import {Vault} from "infinity-core/src/Vault.sol";
+import {PoolId, PoolIdLibrary} from "infinity-core/src/types/PoolId.sol";
+import {IHooks} from "infinity-core/src/interfaces/IHooks.sol";
+import {ICLHooks} from "infinity-core/src/pool-cl/interfaces/ICLHooks.sol";
+import {CustomRevert} from "infinity-core/src/libraries/CustomRevert.sol";
+import {IBinPoolManager} from "infinity-core/src/pool-bin/interfaces/IBinPoolManager.sol";
+import {ICLPoolManager} from "infinity-core/src/pool-cl/interfaces/ICLPoolManager.sol";
+import {CLPoolManager} from "infinity-core/src/pool-cl/CLPoolManager.sol";
+import {CLPoolManagerRouter} from "infinity-core/test/pool-cl/helpers/CLPoolManagerRouter.sol";
+import {Hooks} from "infinity-core/src/libraries/Hooks.sol";
+import {IBinPoolManager} from "infinity-core/src/pool-bin/interfaces/IBinPoolManager.sol";
+import {TokenFixture} from "infinity-periphery/test/helpers/TokenFixture.sol";
+import {MockInfinityRouter} from "infinity-periphery/test/mocks/MockInfinityRouter.sol";
+import {IInfinityRouter} from "infinity-periphery/src/interfaces/IInfinityRouter.sol";
+import {ICLRouterBase} from "infinity-periphery/src/pool-cl/interfaces/ICLRouterBase.sol";
+import {PathKey} from "infinity-periphery/src/libraries/PathKey.sol";
+import {Plan, Planner} from "infinity-periphery/src/libraries/Planner.sol";
+import {Actions} from "infinity-periphery/src/libraries/Actions.sol";
+import {ActionConstants} from "infinity-periphery/src/libraries/ActionConstants.sol";
+import {LPFeeLibrary} from "infinity-core/src/libraries/LPFeeLibrary.sol";
+import {CLPoolParametersHelper} from "infinity-core/src/pool-cl/libraries/CLPoolParametersHelper.sol";
+import {PosmTestSetup} from "infinity-periphery/test/pool-cl/shared/PosmTestSetup.sol";
+import {CLLiquidityOperations} from "infinity-periphery/test/pool-cl/shared/CLLiquidityOperations.sol";
+import {FullMath} from "infinity-core/src/pool-cl/libraries/FullMath.sol";
 import {CLDynamicFeeHook} from "../../../src/pool-cl/dynamic-fee/CLDynamicFeeHook.sol";
 
-contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
+contract CLDynamicFeeHookTest is Test, PosmTestSetup {
     using Planner for Plan;
     using CurrencyLibrary for Currency;
 
@@ -47,7 +46,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     IVault public vault;
     ICLPoolManager public poolManager;
 
-    MockV4Router public v4Router;
+    MockInfinityRouter public infinityRouter;
 
     PoolId poolId;
     PoolId poolId1;
@@ -65,7 +64,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
     // MAX DFF 25%
     uint24 MAX_DFF = LPFeeLibrary.ONE_HUNDRED_PERCENT_FEE / 4;
 
-    // v4 swap event
+    // infinity version swap event
     event Swap(
         PoolId indexed id,
         address indexed sender,
@@ -177,9 +176,9 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         });
         poolId1 = key1.toId();
 
-        v4Router = new MockV4Router(vault, poolManager, IBinPoolManager(address(0)));
-        IERC20(Currency.unwrap(currency0)).approve(address(v4Router), 10000000 ether);
-        IERC20(Currency.unwrap(currency1)).approve(address(v4Router), 10000000 ether);
+        infinityRouter = new MockInfinityRouter(vault, poolManager, IBinPoolManager(address(0)));
+        IERC20(Currency.unwrap(currency0)).approve(address(infinityRouter), 10000000 ether);
+        IERC20(Currency.unwrap(currency1)).approve(address(infinityRouter), 10000000 ether);
     }
 
     function test_dynamic_fee_hook_defaultPoolConfig() public view {
@@ -316,7 +315,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         vm.expectEmit(true, true, true, true);
         emit Swap(
             poolId,
-            address(v4Router),
+            address(infinityRouter),
             -1 ether,
             997400509299197405,
             sqrtPriceX96AfterSwap,
@@ -326,9 +325,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             0
         );
 
-        snapStart("CLDynamicFeeHook#swap_no_dynamic_fee_and_no_simulation_swap");
-        v4Router.executeActions(data);
-        snapEnd();
+        infinityRouter.executeActions(data);
+        vm.snapshotGasLastCall("swap_no_dynamic_fee_and_no_simulation_swap");
         (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
         // charge tokenIn fee
         assertGt(feeGrowthGlobal0x128, 0);
@@ -361,7 +359,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         Currency currencyOut = is_zeroForOne ? key.currency1 : key.currency0;
         bytes memory data = planner.finalizeSwap(currencyIn, currencyOut, ActionConstants.MSG_SENDER);
 
-        v4Router.executeActions(data);
+        infinityRouter.executeActions(data);
     }
 
     function test_swap_with_dynamic_fee_zeroForOne() external {
@@ -414,7 +412,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         // Real swap event
         emit Swap(
             poolId,
-            address(v4Router),
+            address(infinityRouter),
             -155 ether,
             145055745017898236407,
             sqrtPriceX96AfterSwap,
@@ -424,9 +422,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             0
         );
 
-        snapStart("CLDynamicFeeHook#swap_with_dynamic_fee_zeroForOne");
-        v4Router.executeActions(data);
-        snapEnd();
+        infinityRouter.executeActions(data);
+        vm.snapshotGasLastCall("swap_with_dynamic_fee_zeroForOne");
 
         (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
         // charge tokenIn fee
@@ -496,7 +493,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         // Real swap event
         emit Swap(
             poolId,
-            address(v4Router),
+            address(infinityRouter),
             145055745017898236407,
             -155 ether,
             sqrtPriceX96AfterSwap,
@@ -506,9 +503,8 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             0
         );
 
-        snapStart("CLDynamicFeeHook#swap_with_dynamic_fee_oneForZero");
-        v4Router.executeActions(data);
-        snapEnd();
+        infinityRouter.executeActions(data);
+        vm.snapshotGasLastCall("swap_with_dynamic_fee_oneForZero");
 
         (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
         // charge tokenIn fee
@@ -572,7 +568,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
         // Real swap event
         emit Swap(
             poolId,
-            address(v4Router),
+            address(infinityRouter),
             -100 ether,
             98489738656404923934,
             sqrtPriceX96AfterSwap,
@@ -581,7 +577,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             dynamic_fee,
             0
         );
-        v4Router.executeActions(data);
+        infinityRouter.executeActions(data);
         (uint256 feeGrowthGlobal0x128, uint256 feeGrowthGlobal1x128) = poolManager.getFeeGrowthGlobals(poolId);
         // charge tokenIn fee
         assertGt(feeGrowthGlobal0x128, 0);
@@ -679,7 +675,7 @@ contract CLDynamicFeeHookTest is Test, PosmTestSetup, GasSnapshot {
             zeroForOne ? key.currency1 : key.currency0,
             ActionConstants.MSG_SENDER
         );
-        v4Router.executeActions(data);
+        infinityRouter.executeActions(data);
     }
 
     receive() external payable {}

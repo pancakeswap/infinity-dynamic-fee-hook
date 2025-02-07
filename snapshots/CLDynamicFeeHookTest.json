@@ -1,0 +1,5 @@
+{
+  "swap_no_dynamic_fee_and_no_simulation_swap": "239643",
+  "swap_with_dynamic_fee_oneForZero": "291920",
+  "swap_with_dynamic_fee_zeroForOne": "292523"
+}
