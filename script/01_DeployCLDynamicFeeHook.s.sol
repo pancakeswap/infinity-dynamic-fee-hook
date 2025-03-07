@@ -18,7 +18,18 @@ import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
  */
 contract DeployCLDynamicFeeHookScript is BaseScript {
     function getDeploymentSalt() public pure override returns (bytes32) {
-        return keccak256("INFINITY-DYNAMIC-FEE-HOOK/CLDynamicFeeHook/1.0.0");
+        revert(); // used getDeploymentSalt(uint24) instead for this deployment
+    }
+
+    /// @dev different getDeploymentSalt function as we have to deploy 2 contract with different lpFee
+    function getDeploymentSalt(uint24 baseLpFee) public pure returns (bytes32) {
+        if (baseLpFee == 1000) {
+            return keccak256("INFINITY-DYNAMIC-FEE-HOOK/CLDynamicFeeHook/1.0.0/baseLpFee1000");
+        } else if (baseLpFee == 3000) {
+            return keccak256("INFINITY-DYNAMIC-FEE-HOOK/CLDynamicFeeHook/1.0.0/baseLpFee3000");
+        } else {
+            revert(); // should not deploy other lpFee tier contract
+        }
     }
 
     struct PoolConfig {
@@ -55,11 +66,16 @@ contract DeployCLDynamicFeeHookScript is BaseScript {
         bytes memory creationCode =
             abi.encodePacked(type(CLDynamicFeeHook).creationCode, abi.encode(clPoolManager, poolConfig));
 
-        address CLDynamicFeeHook = factory.deploy(
-            getDeploymentSalt(), creationCode, keccak256(creationCode), 0, afterDeploymentExecutionPayload, 0
+        address clDynamicFeeHook = factory.deploy(
+            getDeploymentSalt(poolConfig.baseLpFee),
+            creationCode,
+            keccak256(creationCode),
+            0,
+            afterDeploymentExecutionPayload,
+            0
         );
 
-        console.log("CLDynamicFeeHook contract deployed at ", CLDynamicFeeHook);
+        console.log("CLDynamicFeeHook contract deployed at ", clDynamicFeeHook);
 
         vm.stopBroadcast();
     }

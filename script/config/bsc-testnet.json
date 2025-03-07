@@ -2,7 +2,8 @@
     "create3Factory": "0x38Ab3f2CE00973A51d3A2A04d634C9bcbf20e4e1",
     "owner": "0x42571B8414c68B63A2729146CE93F23639d25399",
     "clPoolManager": "0x36A12c70c9Cf64f24E89ee132BF93Df2DCD199d4",
-    "clDynamicFeeHook": "0x788121150930F6CE39eb3bEf7e097D0d29235553",
+    "clDynamicFeeHook_baseLpFee1000": "0x8Ea3944569d752569D45C2e57AEabfAe9fF9108f",
+    "clDynamicFeeHook_baseLpFee3000": "0x788121150930F6CE39eb3bEf7e097D0d29235553",
     "clDynamicFeeHook_alpha": 500000,
     "clDynamicFeeHook_dff_max": 250000,
     "clDynamicFeeHook_baseLpFee": 1000
