@@ -1,6 +1,10 @@
 {
     "create3Factory": "0x38Ab3f2CE00973A51d3A2A04d634C9bcbf20e4e1",
-    "owner": "",
-    "clPoolManager": "",
-    "clDynamicFeeHook": ""
+    "owner": "0x",
+    "clPoolManager": "0x",
+    "clDynamicFeeHook_baseLpFee1000": "0x",
+    "clDynamicFeeHook_baseLpFee3000": "0x",
+    "clDynamicFeeHook_alpha": 500000,
+    "clDynamicFeeHook_dff_max": 250000,
+    "clDynamicFeeHook_baseLpFee": 1000
 }
