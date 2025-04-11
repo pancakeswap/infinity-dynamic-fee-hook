@@ -23,7 +23,9 @@ contract DeployCLDynamicFeeHookScript is BaseScript {
 
     /// @dev different getDeploymentSalt function as we have to deploy 2 contract with different lpFee
     function getDeploymentSalt(uint24 baseLpFee) public pure returns (bytes32) {
-        if (baseLpFee == 1000) {
+        if (baseLpFee == 500) {
+            return keccak256("INFINITY-DYNAMIC-FEE-HOOK/CLDynamicFeeHook/1.0.0/baseLpFee500");
+        } else if (baseLpFee == 1000) {
             return keccak256("INFINITY-DYNAMIC-FEE-HOOK/CLDynamicFeeHook/1.0.0/baseLpFee1000");
         } else if (baseLpFee == 3000) {
             return keccak256("INFINITY-DYNAMIC-FEE-HOOK/CLDynamicFeeHook/1.0.0/baseLpFee3000");
